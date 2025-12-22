@@ -406,7 +406,10 @@ export const MeetingModal = ({ open, onOpenChange, meeting, onSuccess }: Meeting
         created_by: user?.id
       };
 
-      if (meeting) {
+      // Check if this is an update (meeting exists with valid ID) or insert (new meeting)
+      const isUpdate = meeting?.id && meeting.id.trim() !== '';
+      
+      if (isUpdate) {
         const { error } = await supabase
           .from('meetings')
           .update(meetingData)

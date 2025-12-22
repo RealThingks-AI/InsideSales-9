@@ -133,14 +133,16 @@ export const useAccountsImportExport = (onImportComplete: () => void) => {
           tags = tagList.filter((t: string) => validTags.includes(t));
         }
 
-        // Check if record has an ID for update
-        const existingId = record.id || null;
+        // UUID validation regex
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+        // Check if record has a valid UUID for update (ignore non-UUID id values)
+        const existingId = record.id && uuidRegex.test(record.id) ? record.id : null;
 
         // Helper to resolve user ID from name or UUID
         const resolveUserId = (value: string | null, defaultId: string): string => {
           if (!value) return defaultId;
           // Check if it's already a UUID
-          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
           if (uuidRegex.test(value)) return value;
           // Otherwise, look up by name
           return userIdMap[value.toLowerCase()] || defaultId;

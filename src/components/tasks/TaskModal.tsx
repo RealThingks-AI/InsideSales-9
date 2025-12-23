@@ -232,75 +232,76 @@ export const TaskModal = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{task ? 'Edit Task' : 'Create Task'}</DialogTitle>
         </DialogHeader>
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
-            {/* Module Selector */}
-            <FormField
-              control={form.control}
-              name="module_type"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Module</FormLabel>
-                  <Select 
-                    onValueChange={handleModuleChange} 
-                    value={field.value || ''}
-                    disabled={!!isModuleLocked}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select module" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="accounts">Accounts</SelectItem>
-                      <SelectItem value="contacts">Contacts</SelectItem>
-                      <SelectItem value="leads">Leads</SelectItem>
-                      <SelectItem value="meetings">Meetings</SelectItem>
-                      <SelectItem value="deals">Deals</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </FormItem>
-              )}
-            />
-
-            {/* Dynamic Module-Specific Fields */}
-            {selectedModule === 'accounts' && (
+            {/* Module and Module-Specific Field in Grid */}
+            <div className="grid grid-cols-2 gap-4">
+              {/* Module Selector */}
               <FormField
                 control={form.control}
-                name="account_id"
+                name="module_type"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Account</FormLabel>
+                    <FormLabel>Module</FormLabel>
                     <Select 
-                      onValueChange={field.onChange} 
+                      onValueChange={handleModuleChange} 
                       value={field.value || ''}
                       disabled={!!isModuleLocked}
                     >
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Select account" />
+                          <SelectValue placeholder="Select module" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {accounts.map(account => (
-                          <SelectItem key={account.id} value={account.id}>
-                            {account.company_name}
-                          </SelectItem>
-                        ))}
+                        <SelectItem value="accounts">Accounts</SelectItem>
+                        <SelectItem value="contacts">Contacts</SelectItem>
+                        <SelectItem value="leads">Leads</SelectItem>
+                        <SelectItem value="meetings">Meetings</SelectItem>
+                        <SelectItem value="deals">Deals</SelectItem>
                       </SelectContent>
                     </Select>
                   </FormItem>
                 )}
               />
-            )}
 
-            {selectedModule === 'contacts' && (
-              <>
+              {/* Dynamic Module-Specific Fields */}
+              {selectedModule === 'accounts' && (
+                <FormField
+                  control={form.control}
+                  name="account_id"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Account</FormLabel>
+                      <Select 
+                        onValueChange={field.onChange} 
+                        value={field.value || ''}
+                        disabled={!!isModuleLocked}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select account" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {accounts.map(account => (
+                            <SelectItem key={account.id} value={account.id}>
+                              {account.company_name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )}
+                />
+              )}
+
+              {selectedModule === 'contacts' && (
                 <FormField
                   control={form.control}
                   name="contact_id"
@@ -328,17 +329,9 @@ export const TaskModal = ({
                     </FormItem>
                   )}
                 />
-                {selectedContact?.account_name && (
-                  <FormItem>
-                    <FormLabel>Account (Auto-derived)</FormLabel>
-                    <Input value={selectedContact.account_name} disabled className="bg-muted" />
-                  </FormItem>
-                )}
-              </>
-            )}
+              )}
 
-            {selectedModule === 'leads' && (
-              <>
+              {selectedModule === 'leads' && (
                 <FormField
                   control={form.control}
                   name="lead_id"
@@ -366,47 +359,39 @@ export const TaskModal = ({
                     </FormItem>
                   )}
                 />
-                {selectedLead?.account_name && (
-                  <FormItem>
-                    <FormLabel>Account (Auto-derived)</FormLabel>
-                    <Input value={selectedLead.account_name} disabled className="bg-muted" />
-                  </FormItem>
-                )}
-              </>
-            )}
+              )}
 
-            {selectedModule === 'meetings' && (
-              <FormField
-                control={form.control}
-                name="meeting_id"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Meeting</FormLabel>
-                    <Select 
-                      onValueChange={field.onChange} 
-                      value={field.value || ''}
-                      disabled={!!isModuleLocked}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select meeting" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {meetings.map(meeting => (
-                          <SelectItem key={meeting.id} value={meeting.id}>
-                            {meeting.subject} - {format(new Date(meeting.start_time), 'dd/MM/yyyy HH:mm')}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </FormItem>
-                )}
-              />
-            )}
+              {selectedModule === 'meetings' && (
+                <FormField
+                  control={form.control}
+                  name="meeting_id"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Meeting</FormLabel>
+                      <Select 
+                        onValueChange={field.onChange} 
+                        value={field.value || ''}
+                        disabled={!!isModuleLocked}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select meeting" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {meetings.map(meeting => (
+                            <SelectItem key={meeting.id} value={meeting.id}>
+                              {meeting.subject} - {format(new Date(meeting.start_time), 'dd/MM/yyyy HH:mm')}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )}
+                />
+              )}
 
-            {selectedModule === 'deals' && (
-              <>
+              {selectedModule === 'deals' && (
                 <FormField
                   control={form.control}
                   name="deal_id"
@@ -434,14 +419,11 @@ export const TaskModal = ({
                     </FormItem>
                   )}
                 />
-                {selectedDeal && (
-                  <FormItem>
-                    <FormLabel>Deal Stage (Auto-derived)</FormLabel>
-                    <Input value={selectedDeal.stage} disabled className="bg-muted" />
-                  </FormItem>
-                )}
-              </>
-            )}
+              )}
+
+              {/* Empty placeholder when no module selected */}
+              {!selectedModule && <div />}
+            </div>
 
             {/* Task Title */}
             <FormField
@@ -458,49 +440,50 @@ export const TaskModal = ({
               )}
             />
 
-            {/* Assigned To */}
-            <FormField
-              control={form.control}
-              name="assigned_to"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Assigned To</FormLabel>
-                  <Select 
-                    onValueChange={(val) => field.onChange(val === "__none__" ? "" : val)} 
-                    value={field.value || "__none__"}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select user" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="__none__">Unassigned</SelectItem>
-                      {users.map(u => (
-                        <SelectItem key={u.id} value={u.id}>
-                          {u.full_name || 'Unknown'}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </FormItem>
-              )}
-            />
+            {/* Assigned To and Due Date in Grid */}
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="assigned_to"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Assigned To</FormLabel>
+                    <Select 
+                      onValueChange={(val) => field.onChange(val === "__none__" ? "" : val)} 
+                      value={field.value || "__none__"}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select user" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="__none__">Unassigned</SelectItem>
+                        {users.map(u => (
+                          <SelectItem key={u.id} value={u.id}>
+                            {u.full_name || 'Unknown'}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FormItem>
+                )}
+              />
 
-            {/* Due Date */}
-            <FormField
-              control={form.control}
-              name="due_date"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Due Date *</FormLabel>
-                  <FormControl>
-                    <Input type="date" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+              <FormField
+                control={form.control}
+                name="due_date"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Due Date *</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
 
             {/* Status & Priority */}
             <div className="grid grid-cols-2 gap-4">
@@ -558,7 +541,7 @@ export const TaskModal = ({
                 <FormItem>
                   <FormLabel>Description</FormLabel>
                   <FormControl>
-                    <Textarea placeholder="Enter task description" rows={2} {...field} />
+                    <Textarea placeholder="Enter task description" rows={3} {...field} />
                   </FormControl>
                 </FormItem>
               )}

@@ -193,7 +193,7 @@ const Settings = () => {
           })}
           </div>
         </div>
-        <div className="border-b w-full" />
+        <div className="border-b w-full hidden" />
       </div>
 
       {/* Content Area */}

@@ -7,14 +7,14 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Search, Video, Trash2, Edit, Calendar, ArrowUpDown, ArrowUp, ArrowDown, List, CalendarDays, CheckCircle2, AlertCircle, UserX, CalendarClock, BarChart3 } from "lucide-react";
+import { Plus, Search, Video, Trash2, Edit, Calendar, ArrowUpDown, ArrowUp, ArrowDown, List, CalendarDays, CheckCircle2, AlertCircle, UserX, CalendarClock } from "lucide-react";
 import { MeetingsCalendarView } from "@/components/meetings/MeetingsCalendarView";
-import { MeetingAnalyticsDashboard } from "@/components/meetings/MeetingAnalyticsDashboard";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MeetingModal } from "@/components/MeetingModal";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
+import { getMeetingStatus } from "@/utils/meetingStatus";
 type SortColumn = 'subject' | 'date' | 'time' | 'lead_contact' | 'status' | null;
 type SortDirection = 'asc' | 'desc';
 interface Meeting {
@@ -55,7 +55,7 @@ const Meetings = () => {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [sortColumn, setSortColumn] = useState<SortColumn>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
-  const [viewMode, setViewMode] = useState<'table' | 'calendar' | 'analytics'>('table');
+  const [viewMode, setViewMode] = useState<'table' | 'calendar'>('table');
   const fetchMeetings = async () => {
     try {
       setLoading(true);
@@ -91,11 +91,8 @@ const Meetings = () => {
   useEffect(() => {
     fetchMeetings();
   }, []);
-  const getMeetingStatus = (meeting: Meeting): string => {
-    if (meeting.status === 'cancelled') return 'cancelled';
-    const now = new Date();
-    const meetingStart = new Date(meeting.start_time);
-    return meetingStart < now ? 'completed' : 'scheduled';
+  const getEffectiveStatus = (meeting: Meeting) => {
+    return getMeetingStatus(meeting);
   };
   const handleSort = (column: SortColumn) => {
     if (sortColumn === column) {
@@ -115,7 +112,7 @@ const Meetings = () => {
     let filtered = meetings.filter(meeting => {
       const matchesSearch = meeting.subject?.toLowerCase().includes(searchTerm.toLowerCase()) || meeting.lead_name?.toLowerCase().includes(searchTerm.toLowerCase()) || meeting.contact_name?.toLowerCase().includes(searchTerm.toLowerCase());
       if (statusFilter === "all") return matchesSearch;
-      const meetingStatus = getMeetingStatus(meeting);
+      const meetingStatus = getEffectiveStatus(meeting);
       return matchesSearch && meetingStatus === statusFilter;
     });
     if (sortColumn) {
@@ -142,8 +139,8 @@ const Meetings = () => {
             bValue = (b.lead_name || b.contact_name || '').toLowerCase();
             break;
           case 'status':
-            aValue = getMeetingStatus(a);
-            bValue = getMeetingStatus(b);
+            aValue = getEffectiveStatus(a);
+            bValue = getEffectiveStatus(b);
             break;
         }
         if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
@@ -213,14 +210,16 @@ const Meetings = () => {
   };
   const isAllSelected = filteredMeetings.length > 0 && selectedMeetings.length === filteredMeetings.length;
   const isSomeSelected = selectedMeetings.length > 0 && selectedMeetings.length < filteredMeetings.length;
-  const getStatusBadge = (status: string, startTime: string) => {
-    const now = new Date();
-    const meetingStart = new Date(startTime);
-    if (status === 'cancelled') {
+  const getStatusBadge = (meeting: Meeting) => {
+    const status = getEffectiveStatus(meeting);
+    if (status === "cancelled") {
       return <Badge variant="destructive">Cancelled</Badge>;
     }
-    if (meetingStart < now) {
-      return <Badge variant="secondary">Completed</Badge>;
+    if (status === "ongoing") {
+      return <Badge variant="secondary">Ongoing</Badge>;
+    }
+    if (status === "completed") {
+      return <Badge variant="outline">Completed</Badge>;
     }
     return <Badge variant="default">Scheduled</Badge>;
   };
@@ -286,10 +285,6 @@ const Meetings = () => {
                   <CalendarDays className="h-3.5 w-3.5" />
                   Calendar
                 </Button>
-                <Button variant={viewMode === 'analytics' ? 'secondary' : 'ghost'} size="sm" onClick={() => setViewMode('analytics')} className="gap-1.5 h-8 px-2.5 text-xs">
-                  <BarChart3 className="h-3.5 w-3.5" />
-                  Analytics
-                </Button>
               </div>
               
               <Button size="sm" onClick={() => {
@@ -305,7 +300,7 @@ const Meetings = () => {
 
       {/* Main Content */}
       <div className="flex-1 min-h-0 overflow-auto p-6">
-        {viewMode === 'analytics' ? <MeetingAnalyticsDashboard /> : viewMode === 'calendar' ? <MeetingsCalendarView meetings={filteredMeetings} onMeetingClick={meeting => {
+        {viewMode === 'calendar' ? <MeetingsCalendarView meetings={filteredMeetings} onMeetingClick={meeting => {
         setEditingMeeting(meeting);
         setShowModal(true);
       }} onMeetingUpdated={fetchMeetings} /> : <div className="space-y-4">
@@ -323,6 +318,7 @@ const Meetings = () => {
                 <SelectContent>
                   <SelectItem value="all">All Status</SelectItem>
                   <SelectItem value="scheduled">Scheduled</SelectItem>
+                  <SelectItem value="ongoing">Ongoing</SelectItem>
                   <SelectItem value="completed">Completed</SelectItem>
                   <SelectItem value="cancelled">Cancelled</SelectItem>
                 </SelectContent>
@@ -352,7 +348,7 @@ const Meetings = () => {
                     }
                   }} onCheckedChange={handleSelectAll} aria-label="Select all" />
                     </TableHead>
-                    <TableHead>
+                    <TableHead className="min-w-[200px]">
                       <button onClick={() => handleSort('subject')} className="group flex items-center hover:text-foreground transition-colors">
                         Subject {getSortIcon('subject')}
                       </button>
@@ -392,7 +388,15 @@ const Meetings = () => {
                         <TableCell>
                           <Checkbox checked={selectedMeetings.includes(meeting.id)} onCheckedChange={checked => handleSelectMeeting(meeting.id, !!checked)} aria-label={`Select ${meeting.subject}`} />
                         </TableCell>
-                        <TableCell className="font-medium">{meeting.subject}</TableCell>
+                        <TableCell 
+                          className="font-medium text-primary cursor-pointer hover:underline"
+                          onClick={() => {
+                            setEditingMeeting(meeting);
+                            setShowModal(true);
+                          }}
+                        >
+                          {meeting.subject}
+                        </TableCell>
                         <TableCell className="text-sm">
                           {format(new Date(meeting.start_time), 'dd/MM/yyyy')}
                         </TableCell>
@@ -404,7 +408,7 @@ const Meetings = () => {
                           {meeting.contact_name && <div>Contact: {meeting.contact_name}</div>}
                           {!meeting.lead_name && !meeting.contact_name && <span className="text-muted-foreground">—</span>}
                         </TableCell>
-                        <TableCell>{getStatusBadge(meeting.status, meeting.start_time)}</TableCell>
+                        <TableCell>{getStatusBadge(meeting)}</TableCell>
                         <TableCell>{getOutcomeBadge(meeting.outcome || null)}</TableCell>
                         <TableCell>
                           {meeting.join_url ? <a href={meeting.join_url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline flex items-center gap-1">

@@ -376,9 +376,9 @@ export const ListView = ({
 
   return (
     <div className="h-full flex flex-col bg-background">
-      <div className="flex-shrink-0 p-4 bg-background border-b">
-        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-          <div className="flex flex-col sm:flex-row gap-4 flex-1">
+      <div className="flex-shrink-0 px-4 py-2 bg-background border-b border-border">
+        <div className="flex flex-col lg:flex-row gap-2 items-start lg:items-center justify-between">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 flex-1 min-w-0">
             <div className="relative w-64">
               <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4 pointer-events-none" />
               <Input
@@ -405,23 +405,23 @@ export const ListView = ({
                 variant="ghost" 
                 size="sm"
                 onClick={clearAllFilters}
-                className="flex items-center gap-2 text-muted-foreground hover:text-foreground"
+                className="flex items-center gap-2 text-muted-foreground hover:text-foreground h-8 px-3 text-sm"
               >
                 <X className="w-4 h-4" />
                 Clear All
               </Button>
             )}
-          </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            <DealActionsDropdown
-              deals={deals}
-              onImport={onImportDeals}
-              onRefresh={() => {}}
-              selectedDeals={selectedDealObjects}
-              onColumnCustomize={() => setColumnCustomizerOpen(true)}
-              showColumns={true}
-            />
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <DealActionsDropdown
+                deals={deals}
+                onImport={onImportDeals}
+                onRefresh={() => {}}
+                selectedDeals={selectedDealObjects}
+                onColumnCustomize={() => setColumnCustomizerOpen(true)}
+                showColumns={true}
+              />
+            </div>
           </div>
         </div>
       </div>

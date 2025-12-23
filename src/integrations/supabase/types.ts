@@ -1332,6 +1332,8 @@ export type Database = {
           due_time: string | null
           id: string
           lead_id: string | null
+          meeting_id: string | null
+          module_type: string | null
           parent_task_id: string | null
           priority: string
           recurrence: string | null
@@ -1356,6 +1358,8 @@ export type Database = {
           due_time?: string | null
           id?: string
           lead_id?: string | null
+          meeting_id?: string | null
+          module_type?: string | null
           parent_task_id?: string | null
           priority?: string
           recurrence?: string | null
@@ -1380,6 +1384,8 @@ export type Database = {
           due_time?: string | null
           id?: string
           lead_id?: string | null
+          meeting_id?: string | null
+          module_type?: string | null
           parent_task_id?: string | null
           priority?: string
           recurrence?: string | null
@@ -1417,6 +1423,13 @@ export type Database = {
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "meetings"
             referencedColumns: ["id"]
           },
           {

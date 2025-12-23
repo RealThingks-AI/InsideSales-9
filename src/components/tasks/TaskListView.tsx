@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { format, isPast, isToday } from 'date-fns';
-import { Task, TaskStatus } from '@/types/task';
+import { Task, TaskStatus, TaskModuleType } from '@/types/task';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -15,12 +15,6 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -30,17 +24,13 @@ import {
 import {
   Edit,
   Trash2,
-  MoreHorizontal,
   Search,
-  Calendar,
   User,
   Building2,
   Briefcase,
   Users,
-  ArrowUpDown,
-  ChevronDown,
-  ChevronRight,
-  CheckCircle2,
+  Calendar,
+  FileText,
 } from 'lucide-react';
 import { useUserDisplayNames } from '@/hooks/useUserDisplayNames';
 
@@ -62,7 +52,15 @@ const statusColors = {
   open: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
   in_progress: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
   completed: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-  deferred: 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200',
+  cancelled: 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200',
+};
+
+const moduleIcons: Record<TaskModuleType, React.ElementType> = {
+  accounts: Building2,
+  contacts: User,
+  leads: Users,
+  meetings: Calendar,
+  deals: Briefcase,
 };
 
 export const TaskListView = ({
@@ -75,7 +73,6 @@ export const TaskListView = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
-  const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
 
   const assignedToIds = [...new Set(tasks.map(t => t.assigned_to).filter(Boolean))] as string[];
   const { displayNames } = useUserDisplayNames(assignedToIds);
@@ -88,16 +85,6 @@ export const TaskListView = ({
     return matchesSearch && matchesStatus && matchesPriority;
   });
 
-  const toggleExpand = (taskId: string) => {
-    const newExpanded = new Set(expandedTasks);
-    if (newExpanded.has(taskId)) {
-      newExpanded.delete(taskId);
-    } else {
-      newExpanded.add(taskId);
-    }
-    setExpandedTasks(newExpanded);
-  };
-
   const getDueDateColor = (dueDate: string | null) => {
     if (!dueDate) return '';
     const date = new Date(dueDate);
@@ -106,12 +93,25 @@ export const TaskListView = ({
     return '';
   };
 
-  const getLinkedEntity = (task: Task) => {
-    if (task.lead_name) return { type: 'Lead', name: task.lead_name, icon: Users };
-    if (task.contact_name) return { type: 'Contact', name: task.contact_name, icon: User };
-    if (task.deal_name) return { type: 'Deal', name: task.deal_name, icon: Briefcase };
-    if (task.account_name) return { type: 'Account', name: task.account_name, icon: Building2 };
-    return null;
+  const getLinkedEntityDisplay = (task: Task): { icon: React.ElementType; name: string } | null => {
+    if (!task.module_type) return null;
+    
+    const Icon = moduleIcons[task.module_type] || FileText;
+    
+    switch (task.module_type) {
+      case 'accounts':
+        return task.account_name ? { icon: Icon, name: task.account_name } : null;
+      case 'contacts':
+        return task.contact_name ? { icon: Icon, name: task.contact_name } : null;
+      case 'leads':
+        return task.lead_name ? { icon: Icon, name: task.lead_name } : null;
+      case 'meetings':
+        return task.meeting_subject ? { icon: Icon, name: task.meeting_subject } : null;
+      case 'deals':
+        return task.deal_name ? { icon: Icon, name: task.deal_name } : null;
+      default:
+        return null;
+    }
   };
 
   return (
@@ -125,7 +125,6 @@ export const TaskListView = ({
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-9"
-            inputSize="control"
           />
         </div>
         
@@ -138,7 +137,7 @@ export const TaskListView = ({
             <SelectItem value="open">Open</SelectItem>
             <SelectItem value="in_progress">In Progress</SelectItem>
             <SelectItem value="completed">Completed</SelectItem>
-            <SelectItem value="deferred">Deferred</SelectItem>
+            <SelectItem value="cancelled">Cancelled</SelectItem>
           </SelectContent>
         </Select>
 
@@ -161,7 +160,6 @@ export const TaskListView = ({
           <TableHeader>
             <TableRow className="bg-muted/50">
               <TableHead className="w-10"></TableHead>
-              <TableHead className="w-10"></TableHead>
               <TableHead>Task</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Priority</TableHead>
@@ -174,141 +172,91 @@ export const TaskListView = ({
           <TableBody>
             {filteredTasks.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                   No tasks found
                 </TableCell>
               </TableRow>
             ) : (
               filteredTasks.map((task) => {
-                const linkedEntity = getLinkedEntity(task);
-                const hasSubtasks = task.subtasks && task.subtasks.length > 0;
-                const isExpanded = expandedTasks.has(task.id);
+                const linkedEntity = getLinkedEntityDisplay(task);
 
                 return (
-                  <>
-                    <TableRow key={task.id} className="hover:bg-muted/20">
-                      <TableCell>
-                        {hasSubtasks && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 w-6 p-0"
-                            onClick={() => toggleExpand(task.id)}
-                          >
-                            {isExpanded ? (
-                              <ChevronDown className="h-4 w-4" />
-                            ) : (
-                              <ChevronRight className="h-4 w-4" />
-                            )}
-                          </Button>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Checkbox
-                          checked={task.status === 'completed'}
-                          onCheckedChange={() => onToggleComplete(task)}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <button
-                            onClick={() => onEdit(task)}
-                            className={`font-medium hover:underline text-left ${
-                              task.status === 'completed' ? 'line-through text-muted-foreground' : ''
-                            }`}
-                          >
-                            {task.title}
-                          </button>
-                          {task.category && (
-                            <Badge variant="outline" className="ml-2 text-xs">
-                              {task.category}
-                            </Badge>
-                          )}
-                          {task.recurrence !== 'none' && (
-                            <Badge variant="secondary" className="ml-1 text-xs">
-                              {task.recurrence}
-                            </Badge>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={statusColors[task.status]}>
-                          {task.status.replace('_', ' ')}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={priorityColors[task.priority]}>
-                          {task.priority}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {task.due_date ? (
-                          <span className={getDueDateColor(task.due_date)}>
-                            {format(new Date(task.due_date), 'dd/MM/yyyy')}
-                            {task.due_time && ` ${task.due_time}`}
+                  <TableRow key={task.id} className="hover:bg-muted/20">
+                    <TableCell>
+                      <Checkbox
+                        checked={task.status === 'completed'}
+                        onCheckedChange={() => onToggleComplete(task)}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <button
+                        onClick={() => onEdit(task)}
+                        className={`font-medium hover:underline text-left ${
+                          task.status === 'completed' ? 'line-through text-muted-foreground' : ''
+                        }`}
+                      >
+                        {task.title}
+                      </button>
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={statusColors[task.status]}>
+                        {task.status.replace('_', ' ')}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={priorityColors[task.priority]}>
+                        {task.priority}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {task.due_date ? (
+                        <span className={getDueDateColor(task.due_date)}>
+                          {format(new Date(task.due_date), 'dd/MM/yyyy')}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {task.assigned_to ? (
+                        displayNames[task.assigned_to] || 'Loading...'
+                      ) : (
+                        <span className="text-muted-foreground">Unassigned</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {linkedEntity ? (
+                        <div className="flex items-center gap-1 text-sm">
+                          <linkedEntity.icon className="h-3 w-3" />
+                          <span className="truncate max-w-[100px]" title={linkedEntity.name}>
+                            {linkedEntity.name}
                           </span>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {task.assigned_to ? (
-                          displayNames[task.assigned_to] || 'Loading...'
-                        ) : (
-                          <span className="text-muted-foreground">Unassigned</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {linkedEntity ? (
-                          <div className="flex items-center gap-1 text-sm">
-                            <linkedEntity.icon className="h-3 w-3" />
-                            <span className="truncate max-w-[100px]" title={linkedEntity.name}>
-                              {linkedEntity.name}
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0"
-                            onClick={() => onEdit(task)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                            onClick={() => onDelete(task.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
                         </div>
-                      </TableCell>
-                    </TableRow>
-                    {/* Subtasks */}
-                    {hasSubtasks && isExpanded && task.subtasks?.map((subtask) => (
-                      <TableRow key={subtask.id} className="bg-muted/10">
-                        <TableCell></TableCell>
-                        <TableCell className="pl-8">
-                          <Checkbox
-                            checked={subtask.is_completed}
-                            disabled
-                          />
-                        </TableCell>
-                        <TableCell colSpan={7} className="pl-8">
-                          <span className={subtask.is_completed ? 'line-through text-muted-foreground' : ''}>
-                            {subtask.title}
-                          </span>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0"
+                          onClick={() => onEdit(task)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                          onClick={() => onDelete(task.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
                 );
               })
             )}

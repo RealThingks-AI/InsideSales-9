@@ -1,9 +1,8 @@
 import { useState, useMemo } from 'react';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isSameMonth, addMonths, subMonths, isToday } from 'date-fns';
-import { Task } from '@/types/task';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths, isToday } from 'date-fns';
+import { Task, TaskStatus } from '@/types/task';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 
 interface TaskCalendarViewProps {
@@ -17,11 +16,11 @@ const priorityColors = {
   low: 'bg-green-500',
 };
 
-const statusColors = {
+const statusColors: Record<TaskStatus, string> = {
   open: 'border-l-blue-500',
   in_progress: 'border-l-purple-500',
   completed: 'border-l-green-500 opacity-60',
-  deferred: 'border-l-gray-500 opacity-60',
+  cancelled: 'border-l-gray-500 opacity-60',
 };
 
 export const TaskCalendarView = ({ tasks, onEdit }: TaskCalendarViewProps) => {

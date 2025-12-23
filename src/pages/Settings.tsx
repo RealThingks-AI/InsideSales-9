@@ -160,18 +160,7 @@ const Settings = () => {
     return "Settings";
   };
   return <div className="h-screen flex flex-col bg-background overflow-hidden">
-      {/* Fixed Header */}
-      <div className="flex-shrink-0 bg-background">
-        <div className="px-6 h-16 flex items-center border-b w-full">
-          <div className="flex items-center justify-between w-full">
-            <div className="min-w-0 flex-1">
-              
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Navigation Tabs */}
+      {/* Fixed Header with Navigation Tabs */}
       <div className="flex-shrink-0 bg-background">
         <div className="px-6 py-4">
           <div className="flex flex-wrap gap-2">
@@ -204,6 +193,7 @@ const Settings = () => {
           })}
           </div>
         </div>
+        <div className="border-b w-full" />
       </div>
 
       {/* Content Area */}

@@ -5,8 +5,8 @@ import {
   BarChart3, 
   Settings,
   LogOut,
-  Pin,
-  PinOff,
+  ChevronLeft,
+  ChevronRight,
   Bell,
   Sun,
   Moon,
@@ -340,7 +340,7 @@ export function AppSidebar({ isFixed = false, isOpen, onToggle }: AppSidebarProp
                 className="flex items-center h-10 w-full rounded-lg transition-colors text-sidebar-foreground/70 hover:text-sidebar-primary hover:bg-sidebar-accent/50 font-medium"
               >
                 <div className="w-10 h-10 flex items-center justify-center flex-shrink-0">
-                  {sidebarOpen ? <Pin className="w-5 h-5" /> : <PinOff className="w-5 h-5" />}
+                  {sidebarOpen ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
                 </div>
                 <div 
                   className={`transition-all duration-300 overflow-hidden whitespace-nowrap ${

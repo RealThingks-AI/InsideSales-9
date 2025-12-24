@@ -31,8 +31,10 @@ import {
   Users,
   Calendar,
   FileText,
+  AlertCircle,
 } from 'lucide-react';
 import { useUserDisplayNames } from '@/hooks/useUserDisplayNames';
+import { DeleteConfirmDialog } from '@/components/shared/DeleteConfirmDialog';
 
 interface TaskListViewProps {
   tasks: Task[];
@@ -73,6 +75,9 @@ export const TaskListView = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
+  const [assignedToFilter, setAssignedToFilter] = useState<string>('all');
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
 
   const assignedToIds = [...new Set(tasks.map(t => t.assigned_to).filter(Boolean))] as string[];
   const { displayNames } = useUserDisplayNames(assignedToIds);
@@ -82,15 +87,34 @@ export const TaskListView = ({
       task.description?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || task.status === statusFilter;
     const matchesPriority = priorityFilter === 'all' || task.priority === priorityFilter;
-    return matchesSearch && matchesStatus && matchesPriority;
+    const matchesAssignedTo = assignedToFilter === 'all' || task.assigned_to === assignedToFilter;
+    return matchesSearch && matchesStatus && matchesPriority && matchesAssignedTo;
   });
 
-  const getDueDateColor = (dueDate: string | null) => {
-    if (!dueDate) return '';
+  const getDueDateInfo = (dueDate: string | null, status: string) => {
+    if (!dueDate || status === 'completed' || status === 'cancelled') return { color: '', isOverdue: false, isDueToday: false };
     const date = new Date(dueDate);
-    if (isPast(date) && !isToday(date)) return 'text-red-500';
-    if (isToday(date)) return 'text-orange-500';
-    return '';
+    date.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const isOverdue = date < today;
+    const isDueToday = date.getTime() === today.getTime();
+    if (isOverdue) return { color: 'text-red-600 font-semibold', isOverdue: true, isDueToday: false };
+    if (isDueToday) return { color: 'text-orange-500 font-medium', isOverdue: false, isDueToday: true };
+    return { color: '', isOverdue: false, isDueToday: false };
+  };
+
+  const handleDeleteClick = (task: Task) => {
+    setTaskToDelete(task);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = () => {
+    if (taskToDelete) {
+      onDelete(taskToDelete.id);
+      setTaskToDelete(null);
+      setDeleteDialogOpen(false);
+    }
   };
 
   const getLinkedEntityDisplay = (task: Task): { icon: React.ElementType; name: string } | null => {
@@ -152,6 +176,20 @@ export const TaskListView = ({
             <SelectItem value="low">Low</SelectItem>
           </SelectContent>
         </Select>
+
+        <Select value={assignedToFilter} onValueChange={setAssignedToFilter}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Assigned To" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Assigned</SelectItem>
+            {assignedToIds.map((userId) => (
+              <SelectItem key={userId} value={userId}>
+                <span className="truncate">{displayNames[userId] || 'Loading...'}</span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Task Table */}
@@ -179,9 +217,15 @@ export const TaskListView = ({
             ) : (
               filteredTasks.map((task) => {
                 const linkedEntity = getLinkedEntityDisplay(task);
+                const dueDateInfo = getDueDateInfo(task.due_date, task.status);
 
                 return (
-                  <TableRow key={task.id} className="hover:bg-muted/20">
+                  <TableRow 
+                    key={task.id} 
+                    className={`hover:bg-muted/20 ${
+                      dueDateInfo.isOverdue ? 'bg-red-50 dark:bg-red-900/10' : ''
+                    }`}
+                  >
                     <TableCell>
                       <Checkbox
                         checked={task.status === 'completed'}
@@ -210,9 +254,13 @@ export const TaskListView = ({
                     </TableCell>
                     <TableCell>
                       {task.due_date ? (
-                        <span className={getDueDateColor(task.due_date)}>
-                          {format(new Date(task.due_date), 'dd/MM/yyyy')}
-                        </span>
+                        <div className="flex items-center gap-1">
+                          {dueDateInfo.isOverdue && <AlertCircle className="h-3 w-3 text-red-600" />}
+                          <span className={dueDateInfo.color}>
+                            {dueDateInfo.isOverdue ? 'OVERDUE - ' : dueDateInfo.isDueToday ? 'Today - ' : ''}
+                            {format(new Date(task.due_date), 'dd/MM/yyyy')}
+                          </span>
+                        </div>
                       ) : (
                         <span className="text-muted-foreground">-</span>
                       )}
@@ -243,6 +291,7 @@ export const TaskListView = ({
                           size="sm"
                           className="h-8 w-8 p-0"
                           onClick={() => onEdit(task)}
+                          aria-label="Edit task"
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
@@ -250,7 +299,8 @@ export const TaskListView = ({
                           variant="ghost"
                           size="sm"
                           className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                          onClick={() => onDelete(task.id)}
+                          onClick={() => handleDeleteClick(task)}
+                          aria-label="Delete task"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -263,6 +313,14 @@ export const TaskListView = ({
           </TableBody>
         </Table>
       </Card>
+
+      <DeleteConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        onConfirm={handleConfirmDelete}
+        itemName={taskToDelete?.title}
+        itemType="task"
+      />
     </div>
   );
 };

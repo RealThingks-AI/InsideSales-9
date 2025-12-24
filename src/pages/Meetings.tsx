@@ -7,13 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Search, Video, Trash2, Edit, Calendar, ArrowUpDown, ArrowUp, ArrowDown, List, CalendarDays, CheckCircle2, AlertCircle, UserX, CalendarClock, ChevronDown, Columns, Download, Upload } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Plus, Search, Video, Trash2, Edit, Calendar, ArrowUpDown, ArrowUp, ArrowDown, List, CalendarDays, CheckCircle2, AlertCircle, UserX, CalendarClock } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { MeetingsCalendarView } from "@/components/meetings/MeetingsCalendarView";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MeetingModal } from "@/components/MeetingModal";
@@ -298,20 +293,20 @@ const Meetings = () => {
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="sm" className="gap-1">
                     Actions
-                    <ChevronDown className="h-3.5 w-3.5" />
+                    
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-48">
                   <DropdownMenuItem>
-                    <Columns className="h-4 w-4 mr-2" />
+                    
                     Columns
                   </DropdownMenuItem>
                   <DropdownMenuItem>
-                    <Upload className="h-4 w-4 mr-2" />
+                    
                     Import CSV
                   </DropdownMenuItem>
                   <DropdownMenuItem>
-                    <Download className="h-4 w-4 mr-2" />
+                    
                     Export CSV
                   </DropdownMenuItem>
                   <DropdownMenuItem disabled={selectedMeetings.length === 0} className="text-destructive focus:text-destructive">
@@ -422,13 +417,10 @@ const Meetings = () => {
                         <TableCell>
                           <Checkbox checked={selectedMeetings.includes(meeting.id)} onCheckedChange={checked => handleSelectMeeting(meeting.id, !!checked)} aria-label={`Select ${meeting.subject}`} />
                         </TableCell>
-                        <TableCell 
-                          className="font-medium text-primary cursor-pointer hover:underline"
-                          onClick={() => {
-                            setEditingMeeting(meeting);
-                            setShowModal(true);
-                          }}
-                        >
+                        <TableCell className="font-medium text-primary cursor-pointer hover:underline" onClick={() => {
+                  setEditingMeeting(meeting);
+                  setShowModal(true);
+                }}>
                           {meeting.subject}
                         </TableCell>
                         <TableCell className="text-sm">

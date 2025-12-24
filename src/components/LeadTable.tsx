@@ -10,17 +10,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Search, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, CalendarPlus } from "lucide-react";
-import { RowActionsDropdown, Edit, Trash2, Mail, RefreshCw, ListTodo } from "./RowActionsDropdown";
+import { Search, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, CalendarPlus, CheckSquare } from "lucide-react";
+import { RowActionsDropdown, Edit, Trash2, Mail, RefreshCw } from "./RowActionsDropdown";
 import { LeadModal } from "./LeadModal";
 import { LeadColumnCustomizer, LeadColumnConfig } from "./LeadColumnCustomizer";
 import { LeadStatusFilter } from "./LeadStatusFilter";
 import { ConvertToDealModal } from "./ConvertToDealModal";
-import { LeadActionItemsModal } from "./LeadActionItemsModal";
 import { LeadDeleteConfirmDialog } from "./LeadDeleteConfirmDialog";
 import { AccountViewModal } from "./AccountViewModal";
 import { SendEmailModal, EmailRecipient } from "./SendEmailModal";
 import { MeetingModal } from "./MeetingModal";
+import { TaskModal } from "./tasks/TaskModal";
+import { useTasks } from "@/hooks/useTasks";
 
 interface Lead {
   id: string;
@@ -124,14 +125,16 @@ const LeadTable = ({
   const [leadToConvert, setLeadToConvert] = useState<Lead | null>(null);
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-  const [showActionItemsModal, setShowActionItemsModal] = useState(false);
-  const [selectedLeadForActions, setSelectedLeadForActions] = useState<Lead | null>(null);
   const [viewAccountId, setViewAccountId] = useState<string | null>(null);
   const [accountViewOpen, setAccountViewOpen] = useState(false);
   const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [emailRecipient, setEmailRecipient] = useState<EmailRecipient | null>(null);
   const [meetingModalOpen, setMeetingModalOpen] = useState(false);
   const [meetingLead, setMeetingLead] = useState<Lead | null>(null);
+  const [taskModalOpen, setTaskModalOpen] = useState(false);
+  const [taskLeadId, setTaskLeadId] = useState<string | null>(null);
+  
+  const { createTask } = useTasks();
 
   useEffect(() => {
     fetchLeads();
@@ -356,9 +359,9 @@ const LeadTable = ({
     setLeadToConvert(null);
   };
 
-  const handleActionItems = (lead: Lead) => {
-    setSelectedLeadForActions(lead);
-    setShowActionItemsModal(true);
+  const handleCreateTask = (lead: Lead) => {
+    setTaskLeadId(lead.id);
+    setTaskModalOpen(true);
   };
 
   return <div className="space-y-6">
@@ -470,9 +473,9 @@ const LeadTable = ({
                               }
                             },
                             {
-                              label: "Action Items",
-                              icon: <ListTodo className="w-4 h-4" />,
-                              onClick: () => handleActionItems(lead)
+                              label: "Create Task",
+                              icon: <CheckSquare className="w-4 h-4" />,
+                              onClick: () => handleCreateTask(lead)
                             },
                             ...(userRole !== 'user' ? [{
                               label: "Convert to Deal",
@@ -532,7 +535,12 @@ const LeadTable = ({
 
       <ConvertToDealModal open={showConvertModal} onOpenChange={setShowConvertModal} lead={leadToConvert} onSuccess={handleConvertSuccess} />
 
-      <LeadActionItemsModal open={showActionItemsModal} onOpenChange={setShowActionItemsModal} lead={selectedLeadForActions} />
+      <TaskModal
+        open={taskModalOpen}
+        onOpenChange={setTaskModalOpen}
+        onSubmit={createTask}
+        context={taskLeadId ? { module: 'leads', recordId: taskLeadId, locked: true } : undefined}
+      />
 
       <LeadDeleteConfirmDialog open={showDeleteDialog} onConfirm={handleDelete} onCancel={() => {
       setShowDeleteDialog(false);

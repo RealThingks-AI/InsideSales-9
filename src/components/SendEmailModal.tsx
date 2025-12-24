@@ -29,6 +29,10 @@ interface SendEmailModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   recipient: EmailRecipient | null;
+  contactId?: string | null;
+  leadId?: string | null;
+  accountId?: string | null;
+  onEmailSent?: () => void;
   // Legacy prop for backwards compatibility
   contact?: {
     contact_name: string;
@@ -38,7 +42,7 @@ interface SendEmailModalProps {
   } | null;
 }
 
-export const SendEmailModal = ({ open, onOpenChange, recipient, contact }: SendEmailModalProps) => {
+export const SendEmailModal = ({ open, onOpenChange, recipient, contactId, leadId, accountId, onEmailSent, contact }: SendEmailModalProps) => {
   const { toast } = useToast();
   const { user } = useAuth();
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
@@ -208,11 +212,58 @@ export const SendEmailModal = ({ open, onOpenChange, recipient, contact }: SendE
         throw new Error(data.error);
       }
 
+      // Log email to email_history table
+      try {
+        await supabase.from('email_history').insert({
+          recipient_email: emailRecipient.email,
+          recipient_name: emailRecipient.name,
+          subject: subject.trim(),
+          body: body.trim(),
+          sender_email: senderEmail,
+          sent_by: user?.id,
+          contact_id: contactId || null,
+          lead_id: leadId || null,
+          account_id: accountId || null,
+          status: 'sent',
+        });
+      } catch (historyError) {
+        console.error('Error logging email to history:', historyError);
+      }
+
+      // Update contact email tracking stats if contactId is provided
+      if (contactId) {
+        try {
+          // Get current stats
+          const { data: contactData } = await supabase
+            .from('contacts')
+            .select('email_opens, email_clicks, engagement_score')
+            .eq('id', contactId)
+            .single();
+
+          if (contactData) {
+            const newEmailOpens = (contactData.email_opens || 0) + 1;
+            const newEngagementScore = Math.min((contactData.engagement_score || 0) + 5, 100);
+
+            await supabase
+              .from('contacts')
+              .update({
+                email_opens: newEmailOpens,
+                engagement_score: newEngagementScore,
+                last_contacted_at: new Date().toISOString(),
+              })
+              .eq('id', contactId);
+          }
+        } catch (updateError) {
+          console.error('Error updating contact email stats:', updateError);
+        }
+      }
+
       toast({
         title: "Email Sent",
         description: `Email successfully sent to ${emailRecipient.name}`,
       });
       
+      onEmailSent?.();
       onOpenChange(false);
     } catch (error: any) {
       console.error('Error sending email:', error);

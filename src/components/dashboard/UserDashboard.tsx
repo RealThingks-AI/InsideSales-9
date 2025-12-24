@@ -223,33 +223,24 @@ const UserDashboard = () => {
     enabled: !!user?.id
   });
 
-  // Fetch recent activities
+  // Fetch recent activities from security audit log
   const { data: recentActivities } = useQuery({
     queryKey: ['user-recent-activities', user?.id],
     queryFn: async () => {
-      const { data: contactActivities, error: contactError } = await supabase
-        .from('contact_activities')
-        .select('id, subject, activity_type, activity_date')
-        .eq('created_by', user?.id)
-        .order('activity_date', { ascending: false })
-        .limit(3);
-      if (contactError) throw contactError;
+      const { data, error } = await supabase
+        .from('security_audit_log')
+        .select('id, action, resource_type, resource_id, created_at, details')
+        .order('created_at', { ascending: false })
+        .limit(5);
+      if (error) throw error;
 
-      const { data: accountActivities, error: accountError } = await supabase
-        .from('account_activities')
-        .select('id, subject, activity_type, activity_date')
-        .eq('created_by', user?.id)
-        .order('activity_date', { ascending: false })
-        .limit(3);
-      if (accountError) throw accountError;
-
-      const combined = [
-        ...(contactActivities || []).map(a => ({ ...a, source: 'contact' })),
-        ...(accountActivities || []).map(a => ({ ...a, source: 'account' })),
-      ].sort((a, b) => new Date(b.activity_date).getTime() - new Date(a.activity_date).getTime())
-        .slice(0, 5);
-
-      return combined;
+      return (data || []).map(log => ({
+        id: log.id,
+        subject: `${log.action} ${log.resource_type}`,
+        activity_type: log.action,
+        activity_date: log.created_at,
+        resource_type: log.resource_type,
+      }));
     },
     enabled: !!user?.id
   });
@@ -392,23 +383,47 @@ const UserDashboard = () => {
               {taskReminders && taskReminders.length > 0 ? (
                 <div className="space-y-3">
                   {taskReminders.map((task) => {
-                    const isOverdue = task.due_date && isBefore(new Date(task.due_date), new Date());
+                    const taskDueDate = task.due_date ? new Date(task.due_date) : null;
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    const isOverdue = taskDueDate && isBefore(taskDueDate, today);
+                    const isDueToday = taskDueDate && taskDueDate.toDateString() === new Date().toDateString();
+                    
                     return (
-                      <div key={task.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
+                      <div 
+                        key={task.id} 
+                        className={`flex items-center justify-between p-2 rounded-lg ${
+                          isOverdue 
+                            ? 'bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-700' 
+                            : isDueToday 
+                              ? 'bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800'
+                              : 'bg-muted/50'
+                        }`}
+                      >
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium truncate">{task.title}</p>
-                          <p className={`text-xs ${isOverdue ? 'text-red-500' : 'text-muted-foreground'}`}>
-                            {isOverdue && <AlertCircle className="w-3 h-3 inline mr-1" />}
+                          <p className={`text-sm font-medium truncate ${isOverdue ? 'text-red-800 dark:text-red-200' : ''}`}>
+                            {task.title}
+                          </p>
+                          <p className={`text-xs ${isOverdue ? 'text-red-600 dark:text-red-400 font-medium' : isDueToday ? 'text-orange-600 dark:text-orange-400' : 'text-muted-foreground'}`}>
+                            <AlertCircle className={`w-3 h-3 inline mr-1 ${isOverdue || isDueToday ? '' : 'hidden'}`} />
+                            {isOverdue ? 'OVERDUE - ' : isDueToday ? 'Due Today - ' : ''}
                             Due: {task.due_date ? format(new Date(task.due_date), 'dd/MM/yyyy') : 'No date'}
                           </p>
                         </div>
-                        <span className={`text-xs px-2 py-1 rounded-full ${
-                          task.priority === 'high' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
-                          task.priority === 'medium' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
-                          'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
-                        }`}>
-                          {task.priority}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          {isOverdue && (
+                            <span className="text-xs px-2 py-1 rounded-full bg-red-500 text-white font-semibold">
+                              OVERDUE
+                            </span>
+                          )}
+                          <span className={`text-xs px-2 py-1 rounded-full ${
+                            task.priority === 'high' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                            task.priority === 'medium' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                            'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
+                          }`}>
+                            {task.priority}
+                          </span>
+                        </div>
                       </div>
                     );
                   })}

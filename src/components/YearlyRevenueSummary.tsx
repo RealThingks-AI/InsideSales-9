@@ -151,7 +151,20 @@ const YearlyRevenueSummary = ({
             </div>
           </CardHeader>
           <CardContent>
-            {editingTarget ? <Input value={targetValue} onChange={e => setTargetValue(e.target.value)} placeholder="Enter target amount" type="number" /> : <div className="text-2xl font-bold">{formatCurrency(revenueData?.target || 0)}</div>}
+            {editingTarget ? (
+              <Input 
+                value={targetValue ? Number(targetValue).toLocaleString('en-US') : ''} 
+                onChange={e => {
+                  const rawValue = e.target.value.replace(/,/g, '');
+                  if (rawValue === '' || /^\d+$/.test(rawValue)) {
+                    setTargetValue(rawValue);
+                  }
+                }} 
+                placeholder="Enter target amount" 
+              />
+            ) : (
+              <div className="text-2xl font-bold">{formatCurrency(revenueData?.target || 0)}</div>
+            )}
             <p className="text-xs text-muted-foreground">Set for {selectedYear}</p>
           </CardContent>
         </Card>

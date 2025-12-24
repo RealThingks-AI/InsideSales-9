@@ -304,12 +304,18 @@ export const ContactTableBody = ({
       <AccountViewModal open={accountViewOpen} onOpenChange={setAccountViewOpen} accountId={viewAccountId} />
 
       {/* Send Email Modal */}
-      <SendEmailModal open={emailModalOpen} onOpenChange={setEmailModalOpen} recipient={emailContact ? {
-      name: emailContact.contact_name,
-      email: emailContact.email,
-      company_name: emailContact.company_name,
-      position: emailContact.position
-    } : null} />
+      <SendEmailModal 
+        open={emailModalOpen} 
+        onOpenChange={setEmailModalOpen} 
+        recipient={emailContact ? {
+          name: emailContact.contact_name,
+          email: emailContact.email,
+          company_name: emailContact.company_name,
+          position: emailContact.position
+        } : null}
+        contactId={emailContact?.id}
+        onEmailSent={onRefresh}
+      />
 
       {/* Meeting Modal */}
       <MeetingModal open={meetingModalOpen} onOpenChange={setMeetingModalOpen} meeting={meetingContact ? {

@@ -595,6 +595,91 @@ export type Database = {
         }
         Relationships: []
       }
+      email_history: {
+        Row: {
+          account_id: string | null
+          body: string | null
+          click_count: number | null
+          clicked_at: string | null
+          contact_id: string | null
+          created_at: string
+          id: string
+          lead_id: string | null
+          open_count: number | null
+          opened_at: string | null
+          recipient_email: string
+          recipient_name: string | null
+          sender_email: string
+          sent_at: string
+          sent_by: string | null
+          status: string
+          subject: string
+          updated_at: string
+        }
+        Insert: {
+          account_id?: string | null
+          body?: string | null
+          click_count?: number | null
+          clicked_at?: string | null
+          contact_id?: string | null
+          created_at?: string
+          id?: string
+          lead_id?: string | null
+          open_count?: number | null
+          opened_at?: string | null
+          recipient_email: string
+          recipient_name?: string | null
+          sender_email: string
+          sent_at?: string
+          sent_by?: string | null
+          status?: string
+          subject: string
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string | null
+          body?: string | null
+          click_count?: number | null
+          clicked_at?: string | null
+          contact_id?: string | null
+          created_at?: string
+          id?: string
+          lead_id?: string | null
+          open_count?: number | null
+          opened_at?: string | null
+          recipient_email?: string
+          recipient_name?: string | null
+          sender_email?: string
+          sent_at?: string
+          sent_by?: string | null
+          status?: string
+          subject?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_history_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_history_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_history_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       email_templates: {
         Row: {
           body: string

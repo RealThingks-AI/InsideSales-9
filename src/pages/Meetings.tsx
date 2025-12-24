@@ -437,10 +437,23 @@ const Meetings = () => {
                         <TableCell>{getStatusBadge(meeting)}</TableCell>
                         <TableCell>{getOutcomeBadge(meeting.outcome || null)}</TableCell>
                         <TableCell>
-                          {meeting.join_url ? <a href={meeting.join_url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline flex items-center gap-1">
+                          {meeting.join_url ? (
+                            <a 
+                              href={meeting.join_url} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              className="text-primary hover:underline flex items-center gap-1"
+                            >
                               <Video className="h-4 w-4" />
-                              Join
-                            </a> : <span className="text-muted-foreground">—</span>}
+                              {meeting.join_url.includes('teams') ? 'Join (Teams)' :
+                               meeting.join_url.includes('zoom') ? 'Join (Zoom)' :
+                               meeting.join_url.includes('meet.google') ? 'Join (Meet)' :
+                               meeting.join_url.includes('webex') ? 'Join (Webex)' :
+                               'Join Meeting'}
+                            </a>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">

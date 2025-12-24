@@ -119,13 +119,44 @@ const ProfileSettings = () => {
         {/* Row 1: Avatar + Name/Email */}
         <div className="flex items-start gap-4">
           <div className="flex-shrink-0">
-            <Avatar className="h-16 w-16">
-              <AvatarImage src={profile.avatar_url} alt={profile.full_name} />
-              <AvatarFallback className="text-sm">
-                {getInitials(profile.full_name || 'U')}
-              </AvatarFallback>
-            </Avatar>
-            <p className="text-xs text-muted-foreground mt-1 text-center">Profile picture</p>
+            <div className="relative group">
+              <Avatar className="h-16 w-16 cursor-pointer" onClick={() => {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = 'image/*';
+                input.onchange = async (e) => {
+                  const file = (e.target as HTMLInputElement).files?.[0];
+                  if (file && user) {
+                    try {
+                      const fileExt = file.name.split('.').pop();
+                      const filePath = `${user.id}/avatar.${fileExt}`;
+                      const { error: uploadError } = await supabase.storage
+                        .from('avatars')
+                        .upload(filePath, file, { upsert: true });
+                      if (uploadError) throw uploadError;
+                      const { data: urlData } = supabase.storage
+                        .from('avatars')
+                        .getPublicUrl(filePath);
+                      setProfile(p => ({ ...p, avatar_url: urlData.publicUrl + '?t=' + Date.now() }));
+                      toast.success('Profile picture updated');
+                    } catch (error) {
+                      console.error('Error uploading avatar:', error);
+                      toast.error('Failed to upload profile picture');
+                    }
+                  }
+                };
+                input.click();
+              }}>
+                <AvatarImage src={profile.avatar_url} alt={profile.full_name} />
+                <AvatarFallback className="text-sm">
+                  {getInitials(profile.full_name || 'U')}
+                </AvatarFallback>
+              </Avatar>
+              <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                <span className="text-white text-xs">Change</span>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1 text-center">Click to change</p>
           </div>
 
           <div className="flex-1 grid gap-3 md:grid-cols-2">
@@ -166,8 +197,11 @@ const ProfileSettings = () => {
               <Input
                 id="phone"
                 value={profile.phone}
-                onChange={e => setProfile(p => ({ ...p, phone: e.target.value }))}
-                placeholder="Enter your phone number"
+                onChange={e => {
+                  let value = e.target.value.replace(/[^\d+\s()-]/g, '');
+                  setProfile(p => ({ ...p, phone: value }));
+                }}
+                placeholder="+1 234 567 8900"
                 className="pl-8 h-9"
               />
             </div>

@@ -3,7 +3,8 @@ import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMont
 import { Task, TaskStatus } from '@/types/task';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, Clock } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface TaskCalendarViewProps {
   tasks: Task[];
@@ -105,18 +106,38 @@ export const TaskCalendarView = ({ tasks, onEdit }: TaskCalendarViewProps) => {
                 </div>
                 <div className="space-y-1 overflow-y-auto max-h-[80px]">
                   {dayTasks.slice(0, 3).map((task) => (
-                    <button
-                      key={task.id}
-                      onClick={() => onEdit(task)}
-                      className={`w-full text-left text-xs p-1 rounded border-l-2 bg-card hover:bg-muted/50 transition-colors truncate ${
-                        statusColors[task.status]
-                      }`}
-                    >
-                      <div className="flex items-center gap-1">
-                        <div className={`w-1.5 h-1.5 rounded-full ${priorityColors[task.priority]}`} />
-                        <span className="truncate">{task.title}</span>
-                      </div>
-                    </button>
+                    <Tooltip key={task.id}>
+                      <TooltipTrigger asChild>
+                        <button
+                          onClick={() => onEdit(task)}
+                          className={`w-full text-left text-xs p-1 rounded border-l-2 bg-card hover:bg-muted/50 transition-colors truncate ${
+                            statusColors[task.status]
+                          }`}
+                        >
+                          <div className="flex items-center gap-1">
+                            <div className={`w-1.5 h-1.5 rounded-full ${priorityColors[task.priority]}`} />
+                            <span className="truncate">{task.title}</span>
+                          </div>
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="right" className="max-w-xs">
+                        <div className="space-y-1">
+                          <p className="font-medium">{task.title}</p>
+                          {task.due_time && (
+                            <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <Clock className="h-3 w-3" />
+                              {task.due_time}
+                            </p>
+                          )}
+                          <p className="text-xs">
+                            <span className="capitalize">{task.priority}</span> priority • {task.status.replace('_', ' ')}
+                          </p>
+                          {task.description && (
+                            <p className="text-xs text-muted-foreground line-clamp-2">{task.description}</p>
+                          )}
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
                   ))}
                   {dayTasks.length > 3 && (
                     <div className="text-xs text-muted-foreground text-center">

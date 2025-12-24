@@ -410,11 +410,33 @@ export const AccountModal = ({ open, onOpenChange, account, onSuccess }: Account
                     <div className="flex items-center gap-1 flex-1 min-w-0">
                       {selectedTags.length > 0 ? (
                         <div className="flex gap-1 flex-wrap flex-1">
-                          {selectedTags.map((tag) => (
+                          {selectedTags.slice(0, 4).map((tag) => (
                             <Badge key={tag} variant="secondary" className="text-xs">
                               {tag}
                             </Badge>
                           ))}
+                          {selectedTags.length > 4 && (
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Badge 
+                                  variant="outline" 
+                                  className="text-xs cursor-pointer hover:bg-muted"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  +{selectedTags.length - 4} more
+                                </Badge>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-auto p-2" side="top" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex flex-wrap gap-1 max-w-xs">
+                                  {selectedTags.slice(4).map((tag) => (
+                                    <Badge key={tag} variant="secondary" className="text-xs">
+                                      {tag}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </PopoverContent>
+                            </Popover>
+                          )}
                         </div>
                       ) : (
                         <span className="text-muted-foreground">Select tags...</span>

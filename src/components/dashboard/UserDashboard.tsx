@@ -327,6 +327,15 @@ const UserDashboard = () => {
             <CardContent>
               <div className="text-2xl font-bold">{actionItemsData?.total || 0}</div>
               <p className="text-xs text-muted-foreground">{actionItemsData?.overdue || 0} overdue</p>
+              <Button 
+                variant="link" 
+                size="sm" 
+                className="mt-2 p-0 h-auto text-xs text-primary"
+                onClick={() => navigate('/tasks')}
+              >
+                <Plus className="w-3 h-3 mr-1" />
+                Create Task
+              </Button>
             </CardContent>
           </Card>
         );

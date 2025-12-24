@@ -277,10 +277,12 @@ export const LeadModal = ({ open, onOpenChange, lead, onSuccess }: LeadModalProp
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Company Account</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value || ""}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Select account" />
+                          <SelectValue placeholder="Select account">
+                            {field.value && accounts.find(a => a.id === field.value)?.company_name}
+                          </SelectValue>
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>

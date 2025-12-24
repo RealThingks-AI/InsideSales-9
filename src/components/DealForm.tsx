@@ -335,6 +335,36 @@ export const DealForm = ({ deal, isOpen, onClose, onSave, isCreating = false, in
           </div>
         </DialogHeader>
 
+        {/* Deal Summary Section - Only show for existing deals */}
+        {!isCreating && formData && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted/50 rounded-lg mb-4">
+            <div>
+              <p className="text-xs text-muted-foreground">Customer</p>
+              <p className="font-medium truncate">{formData.customer_name || '-'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Contract Value</p>
+              <p className="font-medium text-primary">
+                {formData.total_contract_value 
+                  ? `€${formData.total_contract_value.toLocaleString()}`
+                  : '-'}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Probability</p>
+              <p className="font-medium">{formData.probability ? `${formData.probability}%` : '-'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Expected Close</p>
+              <p className="font-medium">
+                {formData.expected_closing_date 
+                  ? new Date(formData.expected_closing_date).toLocaleDateString()
+                  : '-'}
+              </p>
+            </div>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-6">
           <DealStageForm
             formData={formData}

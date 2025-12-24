@@ -152,16 +152,20 @@ const YearlyRevenueSummary = ({
           </CardHeader>
           <CardContent>
             {editingTarget ? (
-              <Input 
-                value={targetValue ? Number(targetValue).toLocaleString('en-US') : ''} 
-                onChange={e => {
-                  const rawValue = e.target.value.replace(/,/g, '');
-                  if (rawValue === '' || /^\d+$/.test(rawValue)) {
-                    setTargetValue(rawValue);
-                  }
-                }} 
-                placeholder="Enter target amount" 
-              />
+              <div className="flex items-center gap-1">
+                <span className="text-lg font-semibold">€</span>
+                <Input 
+                  value={targetValue ? Number(targetValue).toLocaleString('en-US') : ''} 
+                  onChange={e => {
+                    const rawValue = e.target.value.replace(/,/g, '');
+                    if (rawValue === '' || /^\d+$/.test(rawValue)) {
+                      setTargetValue(rawValue);
+                    }
+                  }} 
+                  placeholder="8,500,000" 
+                  className="font-semibold"
+                />
+              </div>
             ) : (
               <div className="text-2xl font-bold">{formatCurrency(revenueData?.target || 0)}</div>
             )}

@@ -58,41 +58,32 @@ const UserManagement = () => {
   const fetchUsers = useCallback(async () => {
     try {
       console.log('Fetching users with role validation...');
-      const {
-        data,
-        error
-      } = await supabase.functions.invoke('user-admin', {
-        method: 'GET'
-      });
-      console.log('Function response:', {
-        data,
-        error
-      });
-      if (error) {
-        console.error('Error fetching users:', error);
-        throw error;
+      
+      // Fetch users and roles in parallel for faster loading
+      const [usersResponse, rolesResponse] = await Promise.all([
+        supabase.functions.invoke('user-admin', { method: 'GET' }),
+        supabase.from('user_roles').select('user_id, role')
+      ]);
+      
+      if (usersResponse.error) {
+        console.error('Error fetching users:', usersResponse.error);
+        throw usersResponse.error;
       }
 
-      // Fetch roles for all users
-      const userIds = data.users?.map((user: any) => user.id) || [];
-      let userRoles: Record<string, string> = {};
-      if (userIds.length > 0) {
-        const {
-          data: rolesData
-        } = await supabase.from('user_roles').select('user_id, role').in('user_id', userIds);
-        if (rolesData) {
-          userRoles = rolesData.reduce((acc: Record<string, string>, item: any) => {
-            acc[item.user_id] = item.role;
-            return acc;
-          }, {});
-        }
+      // Build roles lookup map
+      const userRoles: Record<string, string> = {};
+      if (rolesResponse.data) {
+        rolesResponse.data.forEach((item: any) => {
+          userRoles[item.user_id] = item.role;
+        });
       }
 
       // Combine user data with roles
-      const usersWithRoles = data.users?.map((user: any) => ({
+      const usersWithRoles = usersResponse.data.users?.map((user: any) => ({
         ...user,
         role: userRoles[user.id] || 'user'
       })) || [];
+      
       console.log('Users fetched successfully:', usersWithRoles.length);
       setUsers(usersWithRoles);
     } catch (error: any) {

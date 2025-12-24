@@ -146,6 +146,12 @@ export const KanbanBoard = ({
     try {
       console.log(`Moving deal ${draggableId} to stage ${newStage}`);
       
+      // Show immediate visual feedback
+      toast({
+        title: "Moving Deal...",
+        description: `Moving to ${newStage} stage`,
+      });
+      
       // Create update object with the new stage
       const updates: Partial<Deal> = {
         stage: newStage
@@ -154,8 +160,8 @@ export const KanbanBoard = ({
       await onUpdateDeal(draggableId, updates);
       
       toast({
-        title: "Deal Updated",
-        description: `Deal moved to ${newStage} stage`,
+        title: "Deal Moved",
+        description: `Successfully moved to ${newStage} stage`,
       });
     } catch (error) {
       console.error("Error updating deal stage:", error);

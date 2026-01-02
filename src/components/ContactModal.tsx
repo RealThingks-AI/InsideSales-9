@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useCRUDAudit } from "@/hooks/useCRUDAudit";
+import { useDuplicateDetection } from "@/hooks/useDuplicateDetection";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -14,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { X, ChevronDown } from "lucide-react";
+import { DuplicateWarning } from "./shared/DuplicateWarning";
 
 // Helper function for URL validation
 const normalizeUrl = (url: string) => {
@@ -122,6 +124,30 @@ export const ContactModal = ({ open, onOpenChange, contact, onSuccess }: Contact
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [accountSearch, setAccountSearch] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+
+  // Duplicate detection for contacts
+  const { duplicates, isChecking, checkDuplicates, clearDuplicates } = useDuplicateDetection({
+    table: 'contacts',
+    nameField: 'contact_name',
+    emailField: 'email',
+  });
+
+  // Debounced duplicate check
+  const debouncedCheckDuplicates = useCallback(
+    (() => {
+      let timeoutId: NodeJS.Timeout;
+      return (name: string, email?: string) => {
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => {
+          // Only check for new contacts, not when editing
+          if (!contact) {
+            checkDuplicates(name, email);
+          }
+        }, 500);
+      };
+    })(),
+    [contact, checkDuplicates]
+  );
 
   const toggleTag = (tag: string) => {
     setSelectedTags(prev => 
@@ -288,6 +314,11 @@ export const ContactModal = ({ open, onOpenChange, contact, onSuccess }: Contact
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            {/* Duplicate Warning */}
+            {!contact && duplicates.length > 0 && (
+              <DuplicateWarning duplicates={duplicates} entityType="contact" />
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <FormField
                 control={form.control}
@@ -296,7 +327,14 @@ export const ContactModal = ({ open, onOpenChange, contact, onSuccess }: Contact
                   <FormItem>
                     <FormLabel>Contact Name *</FormLabel>
                     <FormControl>
-                      <Input placeholder="Contact Name" {...field} />
+                      <Input 
+                        placeholder="Contact Name" 
+                        {...field}
+                        onChange={(e) => {
+                          field.onChange(e);
+                          debouncedCheckDuplicates(e.target.value, form.getValues('email'));
+                        }}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -362,7 +400,15 @@ export const ContactModal = ({ open, onOpenChange, contact, onSuccess }: Contact
                   <FormItem>
                     <FormLabel>Email</FormLabel>
                     <FormControl>
-                      <Input type="email" placeholder="email@example.com" {...field} />
+                      <Input 
+                        type="email" 
+                        placeholder="email@example.com" 
+                        {...field}
+                        onChange={(e) => {
+                          field.onChange(e);
+                          debouncedCheckDuplicates(form.getValues('contact_name'), e.target.value);
+                        }}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

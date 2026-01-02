@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useCRUDAudit } from "@/hooks/useCRUDAudit";
+import { useDuplicateDetection } from "@/hooks/useDuplicateDetection";
 import { useQuery } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -13,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { LEAD_SOURCES } from "@/utils/leadStatusUtils";
+import { DuplicateWarning } from "./shared/DuplicateWarning";
 
 const leadSchema = z.object({
   lead_name: z.string()
@@ -69,6 +71,30 @@ export const LeadModal = ({ open, onOpenChange, lead, onSuccess }: LeadModalProp
   const [loading, setLoading] = useState(false);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [accountSearch, setAccountSearch] = useState("");
+
+  // Duplicate detection for leads
+  const { duplicates, isChecking, checkDuplicates, clearDuplicates } = useDuplicateDetection({
+    table: 'leads',
+    nameField: 'lead_name',
+    emailField: 'email',
+  });
+
+  // Debounced duplicate check
+  const debouncedCheckDuplicates = useCallback(
+    (() => {
+      let timeoutId: NodeJS.Timeout;
+      return (name: string, email?: string) => {
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => {
+          // Only check for new leads, not when editing
+          if (!lead) {
+            checkDuplicates(name, email);
+          }
+        }, 500);
+      };
+    })(),
+    [lead, checkDuplicates]
+  );
 
   // Fetch lead statuses from database
   const { data: leadStatuses = [] } = useQuery({
@@ -272,6 +298,11 @@ export const LeadModal = ({ open, onOpenChange, lead, onSuccess }: LeadModalProp
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            {/* Duplicate Warning */}
+            {!lead && duplicates.length > 0 && (
+              <DuplicateWarning duplicates={duplicates} entityType="lead" />
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <FormField
                 control={form.control}
@@ -280,7 +311,14 @@ export const LeadModal = ({ open, onOpenChange, lead, onSuccess }: LeadModalProp
                   <FormItem>
                     <FormLabel>Lead Name *</FormLabel>
                     <FormControl>
-                      <Input placeholder="Lead Name" {...field} />
+                      <Input 
+                        placeholder="Lead Name" 
+                        {...field}
+                        onChange={(e) => {
+                          field.onChange(e);
+                          debouncedCheckDuplicates(e.target.value, form.getValues('email'));
+                        }}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -348,7 +386,15 @@ export const LeadModal = ({ open, onOpenChange, lead, onSuccess }: LeadModalProp
                   <FormItem>
                     <FormLabel>Email</FormLabel>
                     <FormControl>
-                      <Input type="email" placeholder="email@example.com" {...field} />
+                      <Input 
+                        type="email" 
+                        placeholder="email@example.com" 
+                        {...field}
+                        onChange={(e) => {
+                          field.onChange(e);
+                          debouncedCheckDuplicates(form.getValues('lead_name'), e.target.value);
+                        }}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

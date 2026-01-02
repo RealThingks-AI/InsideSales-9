@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useCRUDAudit } from "@/hooks/useCRUDAudit";
+import { useDuplicateDetection } from "@/hooks/useDuplicateDetection";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -15,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { X, ChevronDown } from "lucide-react";
 import { Account } from "./AccountTable";
+import { DuplicateWarning } from "./shared/DuplicateWarning";
 
 const accountSchema = z.object({
   company_name: z.string()
@@ -86,6 +88,30 @@ export const AccountModal = ({ open, onOpenChange, account, onSuccess }: Account
   const [loading, setLoading] = useState(false);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [availableCountries, setAvailableCountries] = useState<string[]>([]);
+
+  // Duplicate detection for accounts
+  const { duplicates, isChecking, checkDuplicates, clearDuplicates } = useDuplicateDetection({
+    table: 'accounts',
+    nameField: 'company_name',
+    emailField: 'email',
+  });
+
+  // Debounced duplicate check
+  const debouncedCheckDuplicates = useCallback(
+    (() => {
+      let timeoutId: NodeJS.Timeout;
+      return (name: string, email?: string) => {
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => {
+          // Only check for new accounts, not when editing
+          if (!account) {
+            checkDuplicates(name, email);
+          }
+        }, 500);
+      };
+    })(),
+    [account, checkDuplicates]
+  );
 
   const form = useForm<AccountFormData>({
     resolver: zodResolver(accountSchema),
@@ -249,6 +275,11 @@ export const AccountModal = ({ open, onOpenChange, account, onSuccess }: Account
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            {/* Duplicate Warning */}
+            {!account && duplicates.length > 0 && (
+              <DuplicateWarning duplicates={duplicates} entityType="account" />
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <FormField
                 control={form.control}
@@ -257,7 +288,14 @@ export const AccountModal = ({ open, onOpenChange, account, onSuccess }: Account
                   <FormItem>
                     <FormLabel>Company Name *</FormLabel>
                     <FormControl>
-                      <Input placeholder="Company Name" {...field} />
+                      <Input 
+                        placeholder="Company Name" 
+                        {...field} 
+                        onChange={(e) => {
+                          field.onChange(e);
+                          debouncedCheckDuplicates(e.target.value, form.getValues('email'));
+                        }}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

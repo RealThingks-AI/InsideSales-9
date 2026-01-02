@@ -11,7 +11,9 @@ import { useToast } from "@/hooks/use-toast";
 import { Plus, LayoutGrid, List, Trash2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useCRUDAudit } from "@/hooks/useCRUDAudit";
-import { DealsSettingsDropdown } from "@/components/DealsSettingsDropdown";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Upload, Download, Columns, MoreVertical } from "lucide-react";
+import { useDealsImportExport } from "@/hooks/useDealsImportExport";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 const DealsPage = () => {
   const [searchParams] = useSearchParams();
@@ -40,6 +42,11 @@ const DealsPage = () => {
   const [selectedDealIds, setSelectedDealIds] = useState<string[]>([]);
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
   const [stageFilterFromUrl, setStageFilterFromUrl] = useState(initialStageFilter);
+  
+  // Initialize import/export hook at component level
+  const { handleImport, handleExportAll, handleExportSelected } = useDealsImportExport({
+    onRefresh: () => fetchDeals()
+  });
   
   // Get owner parameter from URL - "me" means filter by current user
   const ownerParam = searchParams.get('owner');
@@ -383,18 +390,56 @@ const DealsPage = () => {
                 </Button>
               </div>
 
-              {/* Actions dropdown */}
-              <DealsSettingsDropdown 
-                deals={deals} 
-                onRefresh={fetchDeals} 
-                selectedDeals={selectedDealIds.map(id => deals.find(d => d.id === id)).filter(Boolean) as Deal[]} 
-                showColumns={activeView === 'list'} 
-                onColumnCustomize={() => {
-                  window.dispatchEvent(new CustomEvent('open-deal-columns'));
-                }}
-                onBulkDelete={() => setShowBulkDeleteDialog(true)}
-                selectedCount={selectedDealIds.length}
-              />
+              {/* Actions dropdown - Consistent with Accounts pattern */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    Actions
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="bg-popover border z-50">
+                  {activeView === 'list' && (
+                    <DropdownMenuItem onClick={() => window.dispatchEvent(new CustomEvent('open-deal-columns'))}>
+                      <Columns className="w-4 h-4 mr-2" />
+                      Columns
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem onClick={() => {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = '.csv';
+                    input.onchange = async (e) => {
+                      const file = (e.target as HTMLInputElement).files?.[0];
+                      if (file) {
+                        await handleImport(file);
+                      }
+                    };
+                    input.click();
+                  }}>
+                    <Upload className="w-4 h-4 mr-2" />
+                    Import CSV
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => {
+                    if (selectedDealIds.length > 0) {
+                      handleExportSelected(deals, selectedDealIds);
+                    } else {
+                      handleExportAll(deals);
+                    }
+                  }}>
+                    <Download className="w-4 h-4 mr-2" />
+                    Export {selectedDealIds.length > 0 ? `(${selectedDealIds.length})` : 'CSV'}
+                  </DropdownMenuItem>
+                  {selectedDealIds.length > 0 && (
+                    <DropdownMenuItem 
+                      onClick={() => setShowBulkDeleteDialog(true)}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Delete Selected ({selectedDealIds.length})
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
 
               <Button size="sm" onClick={() => handleCreateDeal('Lead')} className="gap-1.5">
                 <Plus className="h-4 w-4" />

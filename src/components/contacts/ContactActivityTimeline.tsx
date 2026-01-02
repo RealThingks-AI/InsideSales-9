@@ -30,12 +30,12 @@ const activityIcons: Record<string, React.ReactNode> = {
 };
 
 const activityColors: Record<string, string> = {
-  call: 'bg-blue-500',
-  email: 'bg-green-500',
-  meeting: 'bg-purple-500',
-  note: 'bg-yellow-500',
-  message: 'bg-pink-500',
-  task: 'bg-orange-500',
+  call: 'bg-slate-500',
+  email: 'bg-slate-600',
+  meeting: 'bg-zinc-500',
+  note: 'bg-stone-500',
+  message: 'bg-gray-500',
+  task: 'bg-neutral-600',
 };
 
 export const ContactActivityTimeline = ({ contactId }: ContactActivityTimelineProps) => {

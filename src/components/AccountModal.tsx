@@ -17,16 +17,28 @@ import { X, ChevronDown } from "lucide-react";
 import { Account } from "./AccountTable";
 
 const accountSchema = z.object({
-  company_name: z.string().min(1, "Company name is required"),
-  email: z.string().email("Invalid email address").optional().or(z.literal("")),
+  company_name: z.string()
+    .min(1, "Company name is required")
+    .min(2, "Company name must be at least 2 characters")
+    .max(100, "Company name must be less than 100 characters"),
+  email: z.string().email("Please enter a valid email address (e.g., contact@company.com)").optional().or(z.literal("")),
   region: z.string().optional(),
   country: z.string().optional(),
-  website: z.string().url("Invalid website URL").optional().or(z.literal("")),
+  website: z.string()
+    .refine((val) => !val || val.startsWith('http://') || val.startsWith('https://') || /^[a-zA-Z0-9][a-zA-Z0-9-]*\.[a-zA-Z]{2,}/.test(val), {
+      message: "Please enter a valid URL (e.g., https://company.com or company.com)"
+    })
+    .optional()
+    .or(z.literal("")),
   company_type: z.string().optional(),
   status: z.string().optional(),
-  notes: z.string().optional(),
+  notes: z.string().max(2000, "Notes must be less than 2000 characters").optional(),
   industry: z.string().optional(),
-  phone: z.string().optional(),
+  phone: z.string()
+    .refine((val) => !val || /^[+]?[\d\s\-().]{7,20}$/.test(val), {
+      message: "Please enter a valid phone number (e.g., +1 234 567 8900)"
+    })
+    .optional(),
 });
 
 type AccountFormData = z.infer<typeof accountSchema>;
@@ -58,7 +70,15 @@ const tagOptions = [
   "Vehicle Architecture", "Connected Car", "Platform", "µC/HW"
 ];
 
-const industries = ["Automotive", "Technology", "Manufacturing", "Other"];
+const industries = [
+  "Automotive", "Technology", "Manufacturing", "Healthcare", "Finance/Banking",
+  "Retail", "Energy", "Aerospace", "Telecommunications", "Logistics",
+  "Government", "Education", "Consulting", "Software", "Electronics", "Other"
+];
+
+const companyTypes = ["OEM", "Tier-1", "Tier-2", "Startup", "Enterprise", "SMB", "Government", "Non-Profit", "Other"];
+
+
 
 export const AccountModal = ({ open, onOpenChange, account, onSuccess }: AccountModalProps) => {
   const { toast } = useToast();
@@ -106,6 +126,7 @@ export const AccountModal = ({ open, onOpenChange, account, onSuccess }: Account
         notes: account.notes || "",
         industry: account.industry || "",
         phone: account.phone || "",
+        
       });
       setSelectedTags(account.tags || []);
       if (account.region && regionCountries[account.region]) {
@@ -123,6 +144,7 @@ export const AccountModal = ({ open, onOpenChange, account, onSuccess }: Account
         notes: "",
         industry: "",
         phone: "",
+        
       });
       setSelectedTags([]);
     }
@@ -148,6 +170,7 @@ export const AccountModal = ({ open, onOpenChange, account, onSuccess }: Account
         return;
       }
 
+      // Only set account_owner on create, not update
       const accountData = {
         company_name: data.company_name,
         email: data.email || null,
@@ -160,8 +183,9 @@ export const AccountModal = ({ open, onOpenChange, account, onSuccess }: Account
         notes: data.notes || null,
         industry: data.industry || null,
         phone: data.phone || null,
-        account_owner: user.data.user.id,
         modified_by: user.data.user.id,
+        // Only set account_owner on new accounts
+        ...(account ? {} : { account_owner: user.data.user.id }),
       };
 
       if (account) {
@@ -363,13 +387,25 @@ export const AccountModal = ({ open, onOpenChange, account, onSuccess }: Account
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Company Type</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g., OEM, Tier-1, Startup" {...field} />
-                    </FormControl>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select company type" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {companyTypes.map((type) => (
+                          <SelectItem key={type} value={type}>
+                            {type}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+
 
               <FormField
                 control={form.control}
@@ -494,7 +530,12 @@ export const AccountModal = ({ open, onOpenChange, account, onSuccess }: Account
                 Cancel
               </Button>
               <Button type="submit" disabled={loading}>
-                {loading ? "Saving..." : account ? "Save Changes" : "Add Account"}
+                {loading ? (
+                  <>
+                    <span className="animate-spin mr-2">⏳</span>
+                    {account ? "Saving..." : "Creating..."}
+                  </>
+                ) : account ? "Save Changes" : "Add Account"}
               </Button>
             </div>
           </form>

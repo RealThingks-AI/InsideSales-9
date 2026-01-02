@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Mail, Search, Eye, MousePointer, Clock, User, Building, Filter, RefreshCw } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Mail, Search, Eye, MousePointer, Clock, Filter, RefreshCw, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { format } from "date-fns";
 
 interface EmailHistoryRecord {
@@ -29,6 +30,8 @@ interface EmailHistoryRecord {
   account_id: string | null;
 }
 
+const ITEMS_PER_PAGE = 10;
+
 const EmailHistorySettings = () => {
   const { user } = useAuth();
   const [emails, setEmails] = useState<EmailHistoryRecord[]>([]);
@@ -36,10 +39,16 @@ const EmailHistorySettings = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<string>("all");
   const [selectedEmail, setSelectedEmail] = useState<EmailHistoryRecord | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     fetchEmailHistory();
   }, [user]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, filterType]);
 
   const fetchEmailHistory = async () => {
     if (!user) return;
@@ -104,6 +113,12 @@ const EmailHistorySettings = () => {
     if (filterType === "account") return matchesSearch && email.account_id;
     return matchesSearch;
   });
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredEmails.length / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const paginatedEmails = filteredEmails.slice(startIndex, endIndex);
 
   const stats = {
     total: emails.length,
@@ -206,6 +221,7 @@ const EmailHistorySettings = () => {
           <CardTitle>Sent Emails</CardTitle>
           <CardDescription>
             {filteredEmails.length} email{filteredEmails.length !== 1 ? 's' : ''} found
+            {totalPages > 1 && ` • Page ${currentPage} of ${totalPages}`}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -220,146 +236,200 @@ const EmailHistorySettings = () => {
               <p className="text-sm">Emails you send will appear here</p>
             </div>
           ) : (
-            <ScrollArea className="h-[500px]">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Recipient</TableHead>
-                    <TableHead>Subject</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Sent At</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-center">Opens</TableHead>
-                    <TableHead className="text-center">Clicks</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredEmails.map((email) => {
-                    const entityType = getEntityType(email);
-                    return (
-                      <TableRow 
-                        key={email.id} 
-                        className="cursor-pointer hover:bg-muted/50"
-                        onClick={() => setSelectedEmail(email)}
-                      >
-                        <TableCell>
-                          <div>
-                            <p className="font-medium">{email.recipient_name || "Unknown"}</p>
-                            <p className="text-sm text-muted-foreground">{email.recipient_email}</p>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <p className="max-w-[200px] truncate">{email.subject}</p>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={getEntityBadgeVariant(entityType)}>
-                            {entityType}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                            <Clock className="h-3 w-3" />
-                            {format(new Date(email.sent_at), "MMM d, yyyy HH:mm")}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {getStatusBadge(email.status)}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <span className={email.open_count ? "text-primary font-medium" : "text-muted-foreground"}>
-                            {email.open_count || 0}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <span className={email.click_count ? "text-primary font-medium" : "text-muted-foreground"}>
-                            {email.click_count || 0}
-                          </span>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </ScrollArea>
+            <>
+              <ScrollArea className="h-[400px]">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Recipient</TableHead>
+                      <TableHead>Subject</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Sent At</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-center">Opens</TableHead>
+                      <TableHead className="text-center">Clicks</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedEmails.map((email) => {
+                      const entityType = getEntityType(email);
+                      return (
+                        <TableRow 
+                          key={email.id} 
+                          className="cursor-pointer hover:bg-muted/50"
+                          onClick={() => setSelectedEmail(email)}
+                        >
+                          <TableCell>
+                            <div>
+                              <p className="font-medium">{email.recipient_name || "Unknown"}</p>
+                              <p className="text-sm text-muted-foreground">{email.recipient_email}</p>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <p className="max-w-[200px] truncate">{email.subject}</p>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={getEntityBadgeVariant(entityType)}>
+                              {entityType}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                              <Clock className="h-3 w-3" />
+                              {format(new Date(email.sent_at), "MMM d, yyyy HH:mm")}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {getStatusBadge(email.status)}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <span className={email.open_count ? "text-primary font-medium" : "text-muted-foreground"}>
+                              {email.open_count || 0}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <span className={email.click_count ? "text-primary font-medium" : "text-muted-foreground"}>
+                              {email.click_count || 0}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between pt-4 border-t">
+                  <p className="text-sm text-muted-foreground">
+                    Showing {startIndex + 1}-{Math.min(endIndex, filteredEmails.length)} of {filteredEmails.length}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      aria-label="Previous page"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                        let pageNum: number;
+                        if (totalPages <= 5) {
+                          pageNum = i + 1;
+                        } else if (currentPage <= 3) {
+                          pageNum = i + 1;
+                        } else if (currentPage >= totalPages - 2) {
+                          pageNum = totalPages - 4 + i;
+                        } else {
+                          pageNum = currentPage - 2 + i;
+                        }
+                        return (
+                          <Button
+                            key={pageNum}
+                            variant={currentPage === pageNum ? "default" : "outline"}
+                            size="sm"
+                            className="w-8 h-8 p-0"
+                            onClick={() => setCurrentPage(pageNum)}
+                          >
+                            {pageNum}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                      aria-label="Next page"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
 
       {/* Email Detail Modal */}
-      {selectedEmail && (
-        <Card className="border-primary/50">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Mail className="h-5 w-5" />
-                Email Details
-              </CardTitle>
-              <CardDescription>
-                Sent on {format(new Date(selectedEmail.sent_at), "MMMM d, yyyy 'at' HH:mm")}
-              </CardDescription>
-            </div>
-            <Button variant="ghost" size="sm" onClick={() => setSelectedEmail(null)}>
-              Close
-            </Button>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+      <Dialog open={!!selectedEmail} onOpenChange={() => setSelectedEmail(null)}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Mail className="h-5 w-5" />
+              Email Details
+            </DialogTitle>
+            <DialogDescription>
+              {selectedEmail && `Sent on ${format(new Date(selectedEmail.sent_at), "MMMM d, yyyy 'at' HH:mm")}`}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedEmail && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">From</p>
+                  <p className="font-medium">{selectedEmail.sender_email}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">To</p>
+                  <p className="font-medium">{selectedEmail.recipient_name || "Unknown"}</p>
+                  <p className="text-sm text-muted-foreground">{selectedEmail.recipient_email}</p>
+                </div>
+              </div>
+              
               <div>
-                <p className="text-sm text-muted-foreground">From</p>
-                <p className="font-medium">{selectedEmail.sender_email}</p>
+                <p className="text-sm text-muted-foreground">Subject</p>
+                <p className="font-medium">{selectedEmail.subject}</p>
               </div>
+
               <div>
-                <p className="text-sm text-muted-foreground">To</p>
-                <p className="font-medium">{selectedEmail.recipient_name || "Unknown"}</p>
-                <p className="text-sm text-muted-foreground">{selectedEmail.recipient_email}</p>
+                <p className="text-sm text-muted-foreground mb-2">Message</p>
+                <div className="p-3 bg-muted/50 rounded-lg whitespace-pre-wrap text-sm max-h-[200px] overflow-y-auto">
+                  {selectedEmail.body || "No message content"}
+                </div>
               </div>
-            </div>
-            
-            <div>
-              <p className="text-sm text-muted-foreground">Subject</p>
-              <p className="font-medium">{selectedEmail.subject}</p>
-            </div>
 
-            <div>
-              <p className="text-sm text-muted-foreground mb-2">Message</p>
-              <div className="p-3 bg-muted/50 rounded-lg whitespace-pre-wrap text-sm">
-                {selectedEmail.body || "No message content"}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-2 border-t">
+                <div className="text-center p-3 bg-muted/30 rounded-lg">
+                  <p className="text-sm text-muted-foreground">Status</p>
+                  <div className="mt-1">{getStatusBadge(selectedEmail.status)}</div>
+                </div>
+                <div className="text-center p-3 bg-muted/30 rounded-lg">
+                  <p className="text-sm text-muted-foreground">Opens</p>
+                  <p className="text-xl font-bold text-primary">{selectedEmail.open_count || 0}</p>
+                  {selectedEmail.opened_at && (
+                    <p className="text-xs text-muted-foreground">
+                      Last: {format(new Date(selectedEmail.opened_at), "MMM d, HH:mm")}
+                    </p>
+                  )}
+                </div>
+                <div className="text-center p-3 bg-muted/30 rounded-lg">
+                  <p className="text-sm text-muted-foreground">Clicks</p>
+                  <p className="text-xl font-bold text-primary">{selectedEmail.click_count || 0}</p>
+                  {selectedEmail.clicked_at && (
+                    <p className="text-xs text-muted-foreground">
+                      Last: {format(new Date(selectedEmail.clicked_at), "MMM d, HH:mm")}
+                    </p>
+                  )}
+                </div>
+                <div className="text-center p-3 bg-muted/30 rounded-lg">
+                  <p className="text-sm text-muted-foreground">Entity Type</p>
+                  <Badge variant={getEntityBadgeVariant(getEntityType(selectedEmail))} className="mt-1">
+                    {getEntityType(selectedEmail)}
+                  </Badge>
+                </div>
               </div>
             </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-2 border-t">
-              <div className="text-center p-3 bg-muted/30 rounded-lg">
-                <p className="text-sm text-muted-foreground">Status</p>
-                <div className="mt-1">{getStatusBadge(selectedEmail.status)}</div>
-              </div>
-              <div className="text-center p-3 bg-muted/30 rounded-lg">
-                <p className="text-sm text-muted-foreground">Opens</p>
-                <p className="text-xl font-bold text-primary">{selectedEmail.open_count || 0}</p>
-                {selectedEmail.opened_at && (
-                  <p className="text-xs text-muted-foreground">
-                    Last: {format(new Date(selectedEmail.opened_at), "MMM d, HH:mm")}
-                  </p>
-                )}
-              </div>
-              <div className="text-center p-3 bg-muted/30 rounded-lg">
-                <p className="text-sm text-muted-foreground">Clicks</p>
-                <p className="text-xl font-bold text-primary">{selectedEmail.click_count || 0}</p>
-                {selectedEmail.clicked_at && (
-                  <p className="text-xs text-muted-foreground">
-                    Last: {format(new Date(selectedEmail.clicked_at), "MMM d, HH:mm")}
-                  </p>
-                )}
-              </div>
-              <div className="text-center p-3 bg-muted/30 rounded-lg">
-                <p className="text-sm text-muted-foreground">Entity Type</p>
-                <Badge variant={getEntityBadgeVariant(getEntityType(selectedEmail))} className="mt-1">
-                  {getEntityType(selectedEmail)}
-                </Badge>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

@@ -145,12 +145,11 @@ const Auth = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted">
       <Card className="w-full max-w-md shadow-2xl border-0">
-        <CardHeader className="text-center">
+        <CardHeader className="text-center space-y-2">
           <CardTitle className="text-3xl font-bold bg-gradient-to-r from-primary to-primary/80 bg-clip-text text-transparent">
             RealThingks CRM
           </CardTitle>
-          <CardDescription className="text-base mt-2">
-          </CardDescription>
+          <p className="text-sm text-muted-foreground">Sign in to your account</p>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSignIn} className="space-y-4">

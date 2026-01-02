@@ -12,13 +12,15 @@ import {
   User,
   Briefcase,
   Clock,
-  Loader2
+  Loader2,
+  UserPlus,
+  Video
 } from "lucide-react";
 import { format } from "date-fns";
 
 interface TimelineItem {
   id: string;
-  type: 'activity' | 'contact' | 'deal';
+  type: 'activity' | 'contact' | 'deal' | 'lead' | 'meeting';
   title: string;
   description?: string;
   date: string;
@@ -43,11 +45,11 @@ const getActivityIcon = (type: string) => {
 
 const getActivityColor = (type: string) => {
   switch (type) {
-    case 'call': return 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300';
-    case 'email': return 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300';
-    case 'meeting': return 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300';
-    case 'note': return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300';
-    case 'task': return 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300';
+    case 'call': return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
+    case 'email': return 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300';
+    case 'meeting': return 'bg-stone-100 text-stone-700 dark:bg-stone-800 dark:text-stone-300';
+    case 'note': return 'bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300';
+    case 'task': return 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300';
     default: return 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300';
   }
 };
@@ -77,21 +79,37 @@ export const AccountActivityTimeline = ({ accountId }: AccountActivityTimelinePr
         .eq('account_id', accountId)
         .order('created_time', { ascending: false });
 
-      // Fetch deals (by matching customer_name to account company_name)
-      const { data: account } = await supabase
-        .from('accounts')
-        .select('company_name')
-        .eq('id', accountId)
-        .single();
+      // Fetch deals by account_id (proper FK relationship)
+      const { data: dealData } = await supabase
+        .from('deals')
+        .select('id, deal_name, stage, total_contract_value, created_at')
+        .eq('account_id', accountId)
+        .order('created_at', { ascending: false });
+      const deals = dealData || [];
 
-      let deals: any[] = [];
-      if (account?.company_name) {
-        const { data: dealData } = await supabase
-          .from('deals')
-          .select('id, deal_name, stage, total_contract_value, created_at')
-          .eq('customer_name', account.company_name)
-          .order('created_at', { ascending: false });
-        deals = dealData || [];
+      // Fetch leads associated with this account
+      const { data: leadData } = await supabase
+        .from('leads')
+        .select('id, lead_name, lead_status, company_name, created_time')
+        .eq('account_id', accountId)
+        .order('created_time', { ascending: false });
+      const leads = leadData || [];
+
+      // Fetch meetings for contacts linked to this account
+      const { data: accountContacts } = await supabase
+        .from('contacts')
+        .select('id')
+        .eq('account_id', accountId);
+      
+      let meetings: any[] = [];
+      if (accountContacts && accountContacts.length > 0) {
+        const contactIds = accountContacts.map(c => c.id);
+        const { data: meetingData } = await supabase
+          .from('meetings')
+          .select('id, subject, start_time, status, outcome')
+          .in('contact_id', contactIds)
+          .order('start_time', { ascending: false });
+        meetings = meetingData || [];
       }
 
       // Combine into timeline
@@ -139,6 +157,32 @@ export const AccountActivityTimeline = ({ accountId }: AccountActivityTimelinePr
         });
       });
 
+      // Add leads
+      leads.forEach(lead => {
+        items.push({
+          id: `lead-${lead.id}`,
+          type: 'lead',
+          title: `Lead added: ${lead.lead_name}`,
+          description: lead.lead_status ? `Status: ${lead.lead_status}` : undefined,
+          date: lead.created_time || new Date().toISOString(),
+          icon: <UserPlus className="h-4 w-4" />,
+          metadata: { status: lead.lead_status || '' }
+        });
+      });
+
+      // Add meetings
+      meetings.forEach(meeting => {
+        items.push({
+          id: `meeting-${meeting.id}`,
+          type: 'meeting',
+          title: `Meeting: ${meeting.subject}`,
+          description: meeting.outcome ? `Outcome: ${meeting.outcome}` : `Status: ${meeting.status}`,
+          date: meeting.start_time,
+          icon: <Video className="h-4 w-4" />,
+          metadata: { status: meeting.status, outcome: meeting.outcome || '' }
+        });
+      });
+
       // Sort by date descending
       items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -182,7 +226,13 @@ export const AccountActivityTimeline = ({ accountId }: AccountActivityTimelinePr
                   ? getActivityColor(item.metadata?.type || '')
                   : item.type === 'contact'
                   ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300'
-                  : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300'
+                  : item.type === 'deal'
+                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300'
+                  : item.type === 'lead'
+                  ? 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300'
+                  : item.type === 'meeting'
+                  ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300'
+                  : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
               }`}>
                 {item.icon}
               </div>

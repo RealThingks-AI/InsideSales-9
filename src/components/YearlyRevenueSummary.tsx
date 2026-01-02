@@ -29,8 +29,8 @@ const YearlyRevenueSummary = ({
     isLoading: yearsLoading
   } = useAvailableYears();
 
-  // Create years array from 2023 to 2026, default to current year (2025 for setup)
-  const availableYears = [2023, 2024, 2025, 2026];
+  // Create years array from 2023 to 2027, default to current year
+  const availableYears = [2023, 2024, 2025, 2026, 2027];
   const currentYear = new Date().getFullYear();
   const defaultYear = availableYears.includes(currentYear) ? currentYear : 2025;
   const [internalSelectedYear, setSelectedYear] = useState(defaultYear);

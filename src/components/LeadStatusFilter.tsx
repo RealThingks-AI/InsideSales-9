@@ -1,5 +1,5 @@
-
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
 interface LeadStatusFilterProps {
   value: string;
@@ -7,10 +7,17 @@ interface LeadStatusFilterProps {
 }
 
 export const LeadStatusFilter = ({ value, onValueChange }: LeadStatusFilterProps) => {
+  const isActive = value !== "all";
+  
   return (
-    <Select value={value || "New"} onValueChange={onValueChange}>
-      <SelectTrigger className="w-40">
-        <SelectValue placeholder="New" />
+    <Select value={value || "all"} onValueChange={onValueChange}>
+      <SelectTrigger 
+        className={cn(
+          "w-40",
+          isActive && "border-primary"
+        )}
+      >
+        <SelectValue placeholder="All Statuses" />
       </SelectTrigger>
       <SelectContent>
         <SelectItem value="all">All Statuses</SelectItem>
@@ -19,6 +26,7 @@ export const LeadStatusFilter = ({ value, onValueChange }: LeadStatusFilterProps
         <SelectItem value="Follow-up">Follow-up</SelectItem>
         <SelectItem value="Qualified">Qualified</SelectItem>
         <SelectItem value="Disqualified">Disqualified</SelectItem>
+        <SelectItem value="Converted">Converted</SelectItem>
       </SelectContent>
     </Select>
   );

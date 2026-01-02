@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -14,6 +14,7 @@ import { Plus, Edit, Trash2, Info } from "lucide-react";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { TablePagination } from "@/components/shared/TablePagination";
 
 interface EmailTemplate {
   id: string;
@@ -25,6 +26,8 @@ interface EmailTemplate {
   updated_at: string;
 }
 
+const ITEMS_PER_PAGE = 10;
+
 const EmailTemplatesSettings = () => {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -35,6 +38,7 @@ const EmailTemplatesSettings = () => {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [templateToDelete, setTemplateToDelete] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
   const [formData, setFormData] = useState({
     name: "",
     subject: "",
@@ -66,6 +70,20 @@ const EmailTemplatesSettings = () => {
   useEffect(() => {
     fetchTemplates();
   }, []);
+
+  // Pagination calculations
+  const totalPages = Math.ceil(templates.length / ITEMS_PER_PAGE);
+  const paginatedTemplates = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    return templates.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [templates, currentPage]);
+
+  // Reset to first page when templates change
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(1);
+    }
+  }, [templates, totalPages, currentPage]);
 
   const handleOpenModal = (template?: EmailTemplate) => {
     if (template) {
@@ -210,6 +228,7 @@ const EmailTemplatesSettings = () => {
           </div>
 
           <Table>
+            <caption className="sr-only">Email templates list</caption>
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
@@ -219,14 +238,14 @@ const EmailTemplatesSettings = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {templates.length === 0 ? (
+              {paginatedTemplates.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
                     No email templates yet. Create your first template to get started.
                   </TableCell>
                 </TableRow>
               ) : (
-                templates.map((template) => (
+                paginatedTemplates.map((template) => (
                   <TableRow key={template.id}>
                     <TableCell className="font-medium">{template.name}</TableCell>
                     <TableCell>{template.subject}</TableCell>
@@ -237,6 +256,7 @@ const EmailTemplatesSettings = () => {
                           variant="ghost"
                           size="icon"
                           onClick={() => handleOpenModal(template)}
+                          aria-label={`Edit ${template.name} template`}
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
@@ -247,6 +267,7 @@ const EmailTemplatesSettings = () => {
                             setTemplateToDelete(template.id);
                             setShowDeleteDialog(true);
                           }}
+                          aria-label={`Delete ${template.name} template`}
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
@@ -257,6 +278,18 @@ const EmailTemplatesSettings = () => {
               )}
             </TableBody>
           </Table>
+
+          {/* Pagination */}
+          {templates.length > ITEMS_PER_PAGE && (
+            <TablePagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              itemsPerPage={ITEMS_PER_PAGE}
+              totalItems={templates.length}
+              onPageChange={setCurrentPage}
+              entityName="templates"
+            />
+          )}
         </CardContent>
       </Card>
 

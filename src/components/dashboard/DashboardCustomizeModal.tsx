@@ -3,38 +3,58 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { GripVertical, FileText, Users, Briefcase, Clock, TrendingUp, Zap, BarChart3, Calendar, Activity, Bell, Maximize2, Minimize2 } from "lucide-react";
+import { 
+  GripVertical, FileText, Users, Briefcase, Zap, Calendar, Activity, Bell, 
+  Mail, Building2, ListTodo, CalendarClock, ClipboardList
+} from "lucide-react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-export type WidgetKey = "leads" | "contacts" | "deals" | "actionItems" | "performance" | "quickActions" | "leadStatus" | "upcomingMeetings" | "recentActivities" | "taskReminders";
-export type WidgetSize = "small" | "medium" | "large";
+export type WidgetKey = 
+  | "leads" | "contacts" | "deals" | "quickActions" 
+  | "upcomingMeetings" | "recentActivities" | "taskReminders" | "emailStats"
+  | "accountsSummary" | "weeklySummary" | "followUpsDue" | "todaysAgenda";
+
+export interface WidgetLayout {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface WidgetLayoutConfig {
+  [key: string]: WidgetLayout;
+}
 
 export interface DashboardWidget {
   key: WidgetKey;
   label: string;
   icon: React.ReactNode;
   visible: boolean;
-  size: WidgetSize;
-}
-
-export interface WidgetSizeConfig {
-  [key: string]: WidgetSize;
+  defaultLayout: WidgetLayout;
 }
 
 const DEFAULT_WIDGETS: DashboardWidget[] = [
-  // Dashboard section - core widgets first
-  { key: "leads", label: "My Leads", icon: <FileText className="w-4 h-4" />, visible: true, size: "small" },
-  { key: "contacts", label: "My Contacts", icon: <Users className="w-4 h-4" />, visible: true, size: "small" },
-  { key: "deals", label: "My Deals", icon: <Briefcase className="w-4 h-4" />, visible: true, size: "small" },
-  { key: "actionItems", label: "Action Items", icon: <Clock className="w-4 h-4" />, visible: true, size: "small" },
-  { key: "quickActions", label: "Quick Actions", icon: <Zap className="w-4 h-4" />, visible: true, size: "medium" },
-  { key: "upcomingMeetings", label: "Upcoming Meetings", icon: <Calendar className="w-4 h-4" />, visible: true, size: "medium" },
-  { key: "taskReminders", label: "Task Reminders", icon: <Bell className="w-4 h-4" />, visible: true, size: "medium" },
-  { key: "recentActivities", label: "Recent Activities", icon: <Activity className="w-4 h-4" />, visible: true, size: "medium" },
-  // Revenue Analytics section
-  { key: "performance", label: "My Performance", icon: <TrendingUp className="w-4 h-4" />, visible: true, size: "large" },
-  { key: "leadStatus", label: "Lead Status Overview", icon: <BarChart3 className="w-4 h-4" />, visible: true, size: "large" },
+  // Row 1: Core stat widgets (4x3 each = 12 total)
+  { key: "leads", label: "My Leads", icon: <FileText className="w-4 h-4" />, visible: true, defaultLayout: { x: 0, y: 0, w: 3, h: 2 } },
+  { key: "contacts", label: "My Contacts", icon: <Users className="w-4 h-4" />, visible: true, defaultLayout: { x: 3, y: 0, w: 3, h: 2 } },
+  { key: "deals", label: "My Deals", icon: <Briefcase className="w-4 h-4" />, visible: true, defaultLayout: { x: 6, y: 0, w: 3, h: 2 } },
+  { key: "accountsSummary", label: "Accounts Summary", icon: <Building2 className="w-4 h-4" />, visible: true, defaultLayout: { x: 9, y: 0, w: 3, h: 2 } },
+  
+  // Row 2: Quick Actions
+  { key: "quickActions", label: "Quick Actions", icon: <Zap className="w-4 h-4" />, visible: true, defaultLayout: { x: 0, y: 2, w: 6, h: 2 } },
+  
+  // Row 3: Today's Agenda + Upcoming Meetings + Task Reminders
+  { key: "todaysAgenda", label: "Today's Agenda", icon: <CalendarClock className="w-4 h-4" />, visible: true, defaultLayout: { x: 0, y: 4, w: 4, h: 3 } },
+  { key: "upcomingMeetings", label: "Upcoming Meetings", icon: <Calendar className="w-4 h-4" />, visible: true, defaultLayout: { x: 4, y: 4, w: 4, h: 3 } },
+  { key: "taskReminders", label: "Task Reminders", icon: <Bell className="w-4 h-4" />, visible: true, defaultLayout: { x: 8, y: 4, w: 4, h: 3 } },
+  
+  // Row 4: Recent Activities + Email Stats
+  { key: "recentActivities", label: "Recent Activities", icon: <Activity className="w-4 h-4" />, visible: true, defaultLayout: { x: 0, y: 7, w: 6, h: 3 } },
+  { key: "emailStats", label: "Email Statistics", icon: <Mail className="w-4 h-4" />, visible: true, defaultLayout: { x: 6, y: 7, w: 6, h: 3 } },
+  
+  // Row 5: Weekly Summary + Follow-Ups Due
+  { key: "weeklySummary", label: "Weekly Summary", icon: <ListTodo className="w-4 h-4" />, visible: true, defaultLayout: { x: 0, y: 10, w: 6, h: 2 } },
+  { key: "followUpsDue", label: "Follow-Ups Due", icon: <ClipboardList className="w-4 h-4" />, visible: true, defaultLayout: { x: 6, y: 10, w: 6, h: 2 } },
 ];
 
 interface DashboardCustomizeModalProps {
@@ -42,8 +62,7 @@ interface DashboardCustomizeModalProps {
   onOpenChange: (open: boolean) => void;
   visibleWidgets: WidgetKey[];
   widgetOrder: WidgetKey[];
-  widgetSizes?: WidgetSizeConfig;
-  onSave: (visibleWidgets: WidgetKey[], widgetOrder: WidgetKey[], widgetSizes: WidgetSizeConfig) => void;
+  onSave: (visibleWidgets: WidgetKey[], widgetOrder: WidgetKey[]) => void;
   isSaving?: boolean;
 }
 
@@ -52,7 +71,6 @@ export const DashboardCustomizeModal = ({
   onOpenChange,
   visibleWidgets,
   widgetOrder,
-  widgetSizes = {},
   onSave,
   isSaving = false,
 }: DashboardCustomizeModalProps) => {
@@ -69,7 +87,6 @@ export const DashboardCustomizeModal = ({
         orderedWidgets.push({
           ...defaultWidget,
           visible: visibleWidgets.includes(key),
-          size: widgetSizes[key] || defaultWidget.size,
         });
       }
     });
@@ -80,23 +97,16 @@ export const DashboardCustomizeModal = ({
         orderedWidgets.push({
           ...w,
           visible: visibleWidgets.includes(w.key),
-          size: widgetSizes[w.key] || w.size,
         });
       }
     });
     
     setWidgets(orderedWidgets);
-  }, [visibleWidgets, widgetOrder, widgetSizes, open]);
+  }, [visibleWidgets, widgetOrder, open]);
 
   const toggleWidget = (key: WidgetKey) => {
     setWidgets(prev =>
       prev.map(w => (w.key === key ? { ...w, visible: !w.visible } : w))
-    );
-  };
-
-  const changeSize = (key: WidgetKey, size: WidgetSize) => {
-    setWidgets(prev =>
-      prev.map(w => (w.key === key ? { ...w, size } : w))
     );
   };
 
@@ -113,23 +123,11 @@ export const DashboardCustomizeModal = ({
   const handleSave = () => {
     const visible = widgets.filter(w => w.visible).map(w => w.key);
     const order = widgets.map(w => w.key);
-    const sizes: WidgetSizeConfig = {};
-    widgets.forEach(w => {
-      sizes[w.key] = w.size;
-    });
-    onSave(visible, order, sizes);
+    onSave(visible, order);
   };
 
   const handleReset = () => {
     setWidgets(DEFAULT_WIDGETS.map(w => ({ ...w, visible: true })));
-  };
-
-  const getSizeLabel = (size: WidgetSize) => {
-    switch (size) {
-      case "small": return "S";
-      case "medium": return "M";
-      case "large": return "L";
-    }
   };
 
   return (
@@ -141,7 +139,7 @@ export const DashboardCustomizeModal = ({
         
         <div className="flex-1 overflow-y-auto py-4">
           <p className="text-sm text-muted-foreground mb-4">
-            Drag to reorder, toggle visibility, and resize widgets.
+            Drag to reorder and toggle widget visibility. Use the <strong>Resize</strong> button on the dashboard to freely resize widgets.
           </p>
           
           <DragDropContext onDragEnd={handleDragEnd}>
@@ -179,26 +177,11 @@ export const DashboardCustomizeModal = ({
                               {widget.label}
                             </Label>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <Select
-                              value={widget.size}
-                              onValueChange={(value: WidgetSize) => changeSize(widget.key, value)}
-                            >
-                              <SelectTrigger className="w-[70px] h-8 text-xs">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="small">Small</SelectItem>
-                                <SelectItem value="medium">Medium</SelectItem>
-                                <SelectItem value="large">Large</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <Switch
-                              id={widget.key}
-                              checked={widget.visible}
-                              onCheckedChange={() => toggleWidget(widget.key)}
-                            />
-                          </div>
+                          <Switch
+                            id={widget.key}
+                            checked={widget.visible}
+                            onCheckedChange={() => toggleWidget(widget.key)}
+                          />
                         </div>
                       )}
                     </Draggable>

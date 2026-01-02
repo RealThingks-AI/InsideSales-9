@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Deal, DealStage } from "@/types/deal";
@@ -8,11 +8,14 @@ import { ListView } from "@/components/ListView";
 import { DealForm } from "@/components/DealForm";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, LayoutGrid, List } from "lucide-react";
+import { Plus, LayoutGrid, List, Trash2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useCRUDAudit } from "@/hooks/useCRUDAudit";
 import { DealsSettingsDropdown } from "@/components/DealsSettingsDropdown";
+import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 const DealsPage = () => {
+  const [searchParams] = useSearchParams();
+  const initialStageFilter = searchParams.get('stage') || 'all';
   const {
     user,
     loading: authLoading
@@ -27,12 +30,53 @@ const DealsPage = () => {
     logBulkDelete
   } = useCRUDAudit();
   const [deals, setDeals] = useState<Deal[]>([]);
+  const [filteredDeals, setFilteredDeals] = useState<Deal[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [initialStage, setInitialStage] = useState<DealStage>('Lead');
   const [activeView, setActiveView] = useState<'kanban' | 'list'>('list');
+  const [selectedDealIds, setSelectedDealIds] = useState<string[]>([]);
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
+  const [stageFilterFromUrl, setStageFilterFromUrl] = useState(initialStageFilter);
+  
+  // Get owner parameter from URL - "me" means filter by current user
+  const ownerParam = searchParams.get('owner');
+
+  // Sync stage filter when URL changes
+  useEffect(() => {
+    const urlStage = searchParams.get('stage');
+    if (urlStage) {
+      setStageFilterFromUrl(urlStage);
+    }
+  }, [searchParams]);
+
+  // Handle viewId from URL (from global search)
+  useEffect(() => {
+    const viewId = searchParams.get('viewId');
+    if (viewId && deals.length > 0) {
+      const dealToView = deals.find(d => d.id === viewId);
+      if (dealToView) {
+        setSelectedDeal(dealToView);
+        setIsCreating(false);
+        setIsFormOpen(true);
+        // Clear the viewId from URL after opening
+        const newParams = new URLSearchParams(searchParams);
+        newParams.delete('viewId');
+        navigate(`/deals?${newParams.toString()}`, { replace: true });
+      }
+    }
+  }, [searchParams, deals, navigate]);
+
+  // Filter deals by owner when owner=me
+  useEffect(() => {
+    if (ownerParam === 'me' && user?.id) {
+      setFilteredDeals(deals.filter(deal => deal.created_by === user.id));
+    } else {
+      setFilteredDeals(deals);
+    }
+  }, [deals, ownerParam, user?.id]);
   const fetchDeals = async () => {
     try {
       setLoading(true);
@@ -307,9 +351,27 @@ const DealsPage = () => {
         <div className="px-6 h-16 flex items-center border-b w-full">
           <div className="flex items-center justify-between w-full">
             <div className="min-w-0 flex-1">
-              <h1 className="text-2xl text-foreground font-semibold">Deals</h1>
+              <h1 className="text-xl text-foreground font-semibold">Deals</h1>
             </div>
             <div className="flex items-center gap-3">
+              {/* Bulk action icons when deals are selected */}
+              {selectedDealIds.length > 0 && (
+                <TooltipProvider>
+                  <div className="flex items-center gap-1">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button variant="outline" size="icon" onClick={() => setShowBulkDeleteDialog(true)}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Delete Selected ({selectedDealIds.length})</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                </TooltipProvider>
+              )}
+
               <div className="bg-muted rounded-md p-0.5 flex gap-0.5">
                 <Button variant={activeView === 'kanban' ? 'secondary' : 'ghost'} size="sm" onClick={() => setActiveView('kanban')} className="gap-1.5 h-8 px-2.5 text-xs">
                   <LayoutGrid className="h-3.5 w-3.5" />
@@ -321,12 +383,21 @@ const DealsPage = () => {
                 </Button>
               </div>
 
-              {/* Settings dropdown between view toggle and Add Deal */}
-              <DealsSettingsDropdown deals={deals} onRefresh={fetchDeals} selectedDeals={[]} showColumns={activeView === 'list'} onColumnCustomize={() => {
-              window.dispatchEvent(new CustomEvent('open-deal-columns'));
-            }} />
+              {/* Actions dropdown */}
+              <DealsSettingsDropdown 
+                deals={deals} 
+                onRefresh={fetchDeals} 
+                selectedDeals={selectedDealIds.map(id => deals.find(d => d.id === id)).filter(Boolean) as Deal[]} 
+                showColumns={activeView === 'list'} 
+                onColumnCustomize={() => {
+                  window.dispatchEvent(new CustomEvent('open-deal-columns'));
+                }}
+                onBulkDelete={() => setShowBulkDeleteDialog(true)}
+                selectedCount={selectedDealIds.length}
+              />
 
-              <Button variant="outline" size="sm" onClick={() => handleCreateDeal('Lead')}>
+              <Button size="sm" onClick={() => handleCreateDeal('Lead')} className="gap-1.5">
+                <Plus className="h-4 w-4" />
                 Add Deal
               </Button>
             </div>
@@ -335,12 +406,46 @@ const DealsPage = () => {
       </div>
 
       {/* Main Content Area - Takes remaining height */}
-      <div className="flex-1 min-h-0 overflow-hidden">
-        {activeView === 'kanban' ? <KanbanBoard deals={deals} onUpdateDeal={handleUpdateDeal} onDealClick={handleDealClick} onCreateDeal={handleCreateDeal} onDeleteDeals={handleDeleteDeals} onImportDeals={handleImportDeals} onRefresh={fetchDeals} /> : <ListView deals={deals} onDealClick={handleDealClick} onUpdateDeal={handleUpdateDeal} onDeleteDeals={handleDeleteDeals} onImportDeals={handleImportDeals} />}
+      <div className="flex-1 min-h-0 flex flex-col px-4 pt-2 pb-4 overflow-hidden">
+        {activeView === 'kanban' ? (
+          <KanbanBoard 
+            deals={filteredDeals} 
+            onUpdateDeal={handleUpdateDeal} 
+            onDealClick={handleDealClick} 
+            onCreateDeal={handleCreateDeal} 
+            onDeleteDeals={handleDeleteDeals} 
+            onImportDeals={handleImportDeals} 
+            onRefresh={fetchDeals} 
+          />
+        ) : (
+          <ListView 
+            deals={filteredDeals} 
+            onDealClick={handleDealClick} 
+            onUpdateDeal={handleUpdateDeal} 
+            onDeleteDeals={handleDeleteDeals} 
+            onImportDeals={handleImportDeals} 
+            initialStageFilter={stageFilterFromUrl}
+            onSelectionChange={setSelectedDealIds}
+          />
+        )}
       </div>
 
       {/* Deal Form Modal */}
       <DealForm deal={selectedDeal} isOpen={isFormOpen} onClose={handleCloseForm} onSave={handleSaveDeal} onRefresh={fetchDeals} isCreating={isCreating} initialStage={initialStage} />
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <DeleteConfirmDialog
+        open={showBulkDeleteDialog}
+        onOpenChange={setShowBulkDeleteDialog}
+        onConfirm={() => {
+          handleDeleteDeals(selectedDealIds);
+          setSelectedDealIds([]);
+          setShowBulkDeleteDialog(false);
+        }}
+        title="Delete Deals"
+        itemName={`${selectedDealIds.length} deal${selectedDealIds.length > 1 ? 's' : ''}`}
+        itemType="deals"
+      />
     </div>;
 };
 export default DealsPage;

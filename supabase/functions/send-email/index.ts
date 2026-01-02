@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -18,6 +19,8 @@ interface EmailRequest {
   toName?: string;
   from: string;
   attachments?: EmailAttachment[];
+  entityType?: string; // 'lead', 'contact', 'account'
+  entityId?: string;
 }
 
 async function getAccessToken(): Promise<string> {
@@ -59,7 +62,7 @@ async function getAccessToken(): Promise<string> {
   return data.access_token as string;
 }
 
-async function sendEmail(accessToken: string, emailRequest: EmailRequest): Promise<void> {
+async function sendEmail(accessToken: string, emailRequest: EmailRequest, emailHistoryId: string): Promise<void> {
   const graphUrl = `https://graph.microsoft.com/v1.0/users/${emailRequest.from}/sendMail`;
 
   // Build attachments array for Microsoft Graph API
@@ -70,12 +73,20 @@ async function sendEmail(accessToken: string, emailRequest: EmailRequest): Promi
     contentBytes: att.contentBytes,
   })) || [];
 
+  // Generate tracking pixel URL
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const trackingPixelUrl = `${supabaseUrl}/functions/v1/track-email-open?id=${emailHistoryId}`;
+  
+  // Embed tracking pixel in email body (append to HTML content)
+  const trackingPixel = `<img src="${trackingPixelUrl}" width="1" height="1" style="display:none;" alt="" />`;
+  const bodyWithTracking = emailRequest.body + trackingPixel;
+
   const emailPayload: any = {
     message: {
       subject: emailRequest.subject,
       body: {
-        contentType: "Text",
-        content: emailRequest.body,
+        contentType: "HTML",
+        content: bodyWithTracking,
       },
       toRecipients: [
         {
@@ -95,7 +106,7 @@ async function sendEmail(accessToken: string, emailRequest: EmailRequest): Promi
     console.log(`Adding ${attachments.length} attachment(s) to email`);
   }
 
-  console.log(`Sending email to ${emailRequest.to}...`);
+  console.log(`Sending email to ${emailRequest.to} with tracking pixel...`);
 
   const response = await fetch(graphUrl, {
     method: "POST",
@@ -112,7 +123,7 @@ async function sendEmail(accessToken: string, emailRequest: EmailRequest): Promi
     throw new Error(`Failed to send email: ${response.status} ${errorText}`);
   }
 
-  console.log("Email sent successfully");
+  console.log("Email sent successfully with tracking pixel embedded");
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -122,7 +133,7 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const { to, subject, body, toName, from, attachments }: EmailRequest = await req.json();
+    const { to, subject, body, toName, from, attachments, entityType, entityId }: EmailRequest = await req.json();
 
     if (!to || !subject || !from) {
       return new Response(
@@ -136,14 +147,77 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log(`Processing email request from ${from} to: ${to}${attachments?.length ? ` with ${attachments.length} attachment(s)` : ''}`);
 
+    // Create Supabase client for storing email history
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Get the user ID from the authorization header
+    const authHeader = req.headers.get("authorization");
+    let userId: string | null = null;
+    
+    if (authHeader) {
+      const token = authHeader.replace("Bearer ", "");
+      const { data: { user } } = await supabase.auth.getUser(token);
+      userId = user?.id || null;
+    }
+
+    // Create email history record first to get the ID for tracking
+    const emailHistoryData: any = {
+      recipient_email: to,
+      recipient_name: toName || to,
+      sender_email: from,
+      subject: subject,
+      body: body,
+      status: "sent",
+      sent_by: userId,
+    };
+
+    // Add entity references if provided
+    if (entityType === "lead" && entityId) {
+      emailHistoryData.lead_id = entityId;
+    } else if (entityType === "contact" && entityId) {
+      emailHistoryData.contact_id = entityId;
+    } else if (entityType === "account" && entityId) {
+      emailHistoryData.account_id = entityId;
+    }
+
+    const { data: emailRecord, error: insertError } = await supabase
+      .from("email_history")
+      .insert(emailHistoryData)
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error("Failed to create email history record:", insertError);
+      throw new Error(`Failed to create email history: ${insertError.message}`);
+    }
+
+    console.log(`Created email history record with ID: ${emailRecord.id}`);
+
     // Get access token from Azure AD
     const accessToken = await getAccessToken();
 
-    // Send email via Microsoft Graph API
-    await sendEmail(accessToken, { to, subject, body, toName, from, attachments });
+    // Send email via Microsoft Graph API with tracking pixel
+    await sendEmail(accessToken, { to, subject, body, toName, from, attachments }, emailRecord.id);
+
+    // Update email history to mark as delivered
+    await supabase
+      .from("email_history")
+      .update({ 
+        status: "delivered",
+        delivered_at: new Date().toISOString()
+      })
+      .eq("id", emailRecord.id);
+
+    console.log(`Email marked as delivered for record: ${emailRecord.id}`);
 
     return new Response(
-      JSON.stringify({ success: true, message: "Email sent successfully" }),
+      JSON.stringify({ 
+        success: true, 
+        message: "Email sent successfully",
+        emailId: emailRecord.id 
+      }),
       {
         status: 200,
         headers: { "Content-Type": "application/json", ...corsHeaders },

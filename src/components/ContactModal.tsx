@@ -15,15 +15,54 @@ import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { X, ChevronDown } from "lucide-react";
 
+// Helper function for URL validation
+const normalizeUrl = (url: string) => {
+  if (!url) return url;
+  if (!/^https?:\/\//i.test(url)) {
+    return `https://${url}`;
+  }
+  return url;
+};
+
+// Phone number validation regex - allows various international formats
+const phoneRegex = /^[\+]?[(]?[0-9]{1,4}[)]?[-\s\.]?[0-9]{1,4}[-\s\.]?[0-9]{1,9}$/;
+
 const contactSchema = z.object({
-  contact_name: z.string().min(1, "Contact name is required"),
+  contact_name: z.string()
+    .min(1, "Contact name is required")
+    .min(2, "Contact name must be at least 2 characters")
+    .max(100, "Contact name must be less than 100 characters"),
   account_id: z.string().optional(),
-  position: z.string().optional(),
-  email: z.string().email("Invalid email address").optional().or(z.literal("")),
-  phone_no: z.string().optional(),
-  linkedin: z.string().url("Invalid LinkedIn URL").optional().or(z.literal("")),
+  position: z.string().max(100, "Position must be less than 100 characters").optional(),
+  email: z.string().email("Please enter a valid email address (e.g., name@company.com)").optional().or(z.literal("")),
+  phone_no: z.string()
+    .refine((val) => !val || phoneRegex.test(val.replace(/\s/g, '')), {
+      message: "Please enter a valid phone number (e.g., +1 234 567 8900)",
+    })
+    .optional(),
+  linkedin: z.string()
+    .refine((val) => !val || val.includes('linkedin.com'), {
+      message: "Please enter a valid LinkedIn URL (e.g., https://linkedin.com/in/username)",
+    })
+    .optional()
+    .or(z.literal("")),
+  website: z.string()
+    .refine((val) => {
+      if (!val) return true;
+      const normalized = normalizeUrl(val);
+      try {
+        new URL(normalized);
+        return true;
+      } catch {
+        return false;
+      }
+    }, {
+      message: "Please enter a valid website URL (e.g., company.com or https://company.com)",
+    })
+    .optional()
+    .or(z.literal("")),
   contact_source: z.string().optional(),
-  description: z.string().optional(),
+  description: z.string().max(1000, "Description must be less than 1000 characters").optional(),
 });
 
 type ContactFormData = z.infer<typeof contactSchema>;
@@ -58,11 +97,14 @@ interface ContactModalProps {
 }
 
 const contactSources = [
-  "LinkedIn",
   "Website",
-  "Referral", 
-  "Social Media",
+  "Referral",
+  "LinkedIn",
+  "Cold Call",
+  "Trade Show",
   "Email Campaign",
+  "Social Media",
+  "Partner",
   "Other"
 ];
 
@@ -171,7 +213,8 @@ export const ContactModal = ({ open, onOpenChange, contact, onSuccess }: Contact
         position: data.position || null,
         email: data.email || null,
         phone_no: data.phone_no || null,
-        linkedin: data.linkedin || null,
+        linkedin: data.linkedin ? normalizeUrl(data.linkedin) : null,
+        website: data.website ? normalizeUrl(data.website) : null,
         contact_source: data.contact_source || null,
         description: data.description || null,
         tags: selectedTags,
@@ -458,7 +501,12 @@ export const ContactModal = ({ open, onOpenChange, contact, onSuccess }: Contact
                 Cancel
               </Button>
               <Button type="submit" disabled={loading}>
-                {loading ? "Saving..." : contact ? "Save Changes" : "Add Contact"}
+                {loading ? (
+                  <>
+                    <span className="animate-spin mr-2">⏳</span>
+                    {contact ? "Saving..." : "Creating..."}
+                  </>
+                ) : contact ? "Save Changes" : "Add Contact"}
               </Button>
             </div>
           </form>

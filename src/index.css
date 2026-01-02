@@ -49,23 +49,23 @@ All colors MUST be HSL.
 
     --radius: 0.5rem;
 
-    /* Stage Colors */
-    --stage-lead: 239 84% 85%;
-    --stage-lead-foreground: 239 84% 25%;
-    --stage-discussions: 180 84% 85%;
-    --stage-discussions-foreground: 180 84% 25%;
-    --stage-qualified: 188 95% 85%;
-    --stage-qualified-foreground: 188 95% 25%;
-    --stage-rfq: 204 30% 85%;
-    --stage-rfq-foreground: 204 30% 25%;
-    --stage-offered: 25 95% 85%;
-    --stage-offered-foreground: 25 95% 25%;
-    --stage-won: 142 71% 85%;
-    --stage-won-foreground: 142 71% 25%;
-    --stage-lost: 0 84% 85%;
-    --stage-lost-foreground: 0 84% 25%;
-    --stage-dropped: 0 0% 85%;
-    --stage-dropped-foreground: 0 0% 25%;
+    /* Stage Colors - Professional muted tones */
+    --stage-lead: 220 25% 90%;
+    --stage-lead-foreground: 220 25% 35%;
+    --stage-discussions: 200 20% 90%;
+    --stage-discussions-foreground: 200 20% 35%;
+    --stage-qualified: 210 25% 90%;
+    --stage-qualified-foreground: 210 25% 35%;
+    --stage-rfq: 215 20% 88%;
+    --stage-rfq-foreground: 215 20% 35%;
+    --stage-offered: 35 20% 90%;
+    --stage-offered-foreground: 35 25% 35%;
+    --stage-won: 150 20% 90%;
+    --stage-won-foreground: 150 25% 35%;
+    --stage-lost: 0 15% 90%;
+    --stage-lost-foreground: 0 20% 40%;
+    --stage-dropped: 0 0% 90%;
+    --stage-dropped-foreground: 0 0% 40%;
 
     /* Light Blue Gradients */
     --gradient-primary: linear-gradient(135deg, hsl(204 94% 50%), hsl(204 94% 55%));
@@ -148,7 +148,21 @@ All colors MUST be HSL.
     --sidebar-accent: 215 20% 65%; /* #334155 - slate-700 */
     --sidebar-accent-foreground: 228 84% 4%; /* #f8fafc - slate-50 */
     --sidebar-border: 215 19% 34%; /* #475569 - slate-600 */
-    --sidebar-ring: 198 93% 59%; /* #3b82f6 - blue-500 */ --chart-1: 199 95% 73%; --chart-2: 211 96% 78%; --chart-3: 215 20% 65%; --chart-4: 215 16% 46%; --chart-5: 215 19% 34%; --sidebar: 217 32% 17%; --shadow-2xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05); --shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05); --shadow-sm: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1); --shadow: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1); --shadow-md: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 2px 4px -1px hsl(0 0% 0% / 0.1); --shadow-lg: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 4px 6px -1px hsl(0 0% 0% / 0.1); --shadow-xl: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 8px 10px -1px hsl(0 0% 0% / 0.1); --shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.25);
+    --sidebar-ring: 198 93% 59%;
+    --chart-1: 199 95% 73%;
+    --chart-2: 211 96% 78%;
+    --chart-3: 215 20% 65%;
+    --chart-4: 215 16% 46%;
+    --chart-5: 215 19% 34%;
+    --sidebar: 217 32% 17%;
+    --shadow-2xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
+    --shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
+    --shadow-sm: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1);
+    --shadow: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1);
+    --shadow-md: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 2px 4px -1px hsl(0 0% 0% / 0.1);
+    --shadow-lg: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 4px 6px -1px hsl(0 0% 0% / 0.1);
+    --shadow-xl: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 8px 10px -1px hsl(0 0% 0% / 0.1);
+    --shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.25);
   }
 }
 
@@ -158,18 +172,66 @@ All colors MUST be HSL.
 }
 
 .animate-fade-in {
-  animation: fadeIn 0.3s ease-out;
+  animation: fadeIn 0.3s ease-out forwards;
 }
+
+/* Staggered fade-in for dashboard widgets */
+.animate-stagger-1 { animation-delay: 0.05s; opacity: 0; }
+.animate-stagger-2 { animation-delay: 0.10s; opacity: 0; }
+.animate-stagger-3 { animation-delay: 0.15s; opacity: 0; }
+.animate-stagger-4 { animation-delay: 0.20s; opacity: 0; }
+.animate-stagger-5 { animation-delay: 0.25s; opacity: 0; }
+.animate-stagger-6 { animation-delay: 0.30s; opacity: 0; }
+.animate-stagger-7 { animation-delay: 0.35s; opacity: 0; }
+.animate-stagger-8 { animation-delay: 0.40s; opacity: 0; }
 
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* Shimmer animation for skeleton loading */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--muted)) 25%,
+    hsl(var(--muted) / 0.5) 50%,
+    hsl(var(--muted)) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1s ease-in-out infinite;
+}
+
+/* Improved placeholder visibility (#24) */
+::placeholder {
+  color: hsl(var(--muted-foreground));
+  opacity: 0.7;
+}
+
+/* Required field indicator (#40) */
+.form-required::after {
+  content: " *";
+  color: hsl(var(--destructive));
+}
+
+/* Button scale animation */
+.button-scale {
+  @apply transition-all duration-150 active:scale-95;
 }
 
 @layer base {
@@ -180,7 +242,7 @@ All colors MUST be HSL.
   body {
     @apply bg-background text-foreground font-sans antialiased;
     font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-    font-size: 13px;
+    font-size: 14px;
     line-height: 1.5;
   }
 
@@ -284,5 +346,43 @@ All colors MUST be HSL.
   /* Link styling */
   .link-primary {
     @apply text-primary hover:text-primary/80 hover:underline transition-colors cursor-pointer;
+  }
+
+  /* Skeleton shimmer animation */
+  .skeleton-shimmer {
+    @apply bg-muted/60 rounded-lg relative overflow-hidden;
+  }
+  
+  .skeleton-shimmer::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      hsl(var(--muted) / 0.4),
+      transparent
+    );
+    animation: shimmer 1s infinite;
+  }
+  
+  @keyframes shimmer {
+    100% {
+      transform: translateX(100%);
+    }
+  }
+
+  /* Widget card base styling */
+  .widget-card {
+    @apply bg-card rounded-lg border border-border shadow-sm hover:shadow-md transition-shadow;
+  }
+
+  /* Dashboard grid consistent styling */
+  .dashboard-widget {
+    @apply h-full overflow-hidden flex flex-col animate-fade-in;
   }
 }

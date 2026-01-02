@@ -432,7 +432,7 @@ const UserManagement = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredAndSortedUsers.map(user => <TableRow key={user.id}>
+                  {filteredAndSortedUsers.map(user => <TableRow key={user.id} data-state={selectedUsers.includes(user.id) ? "selected" : undefined}>
                       <TableCell>
                         <Checkbox checked={selectedUsers.includes(user.id)} onCheckedChange={checked => handleSelectUser(user.id, checked as boolean)} />
                       </TableCell>

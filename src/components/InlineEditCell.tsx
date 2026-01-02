@@ -13,8 +13,10 @@ interface InlineEditCellProps {
   field: string;
   dealId: string;
   onSave: (dealId: string, field: string, value: any) => void;
-  type?: 'text' | 'number' | 'date' | 'select' | 'textarea' | 'boolean' | 'stage' | 'priority' | 'currency';
+  type?: 'text' | 'number' | 'date' | 'select' | 'textarea' | 'boolean' | 'stage' | 'priority' | 'currency' | 'userSelect';
   options?: string[];
+  userOptions?: Array<{ id: string; full_name: string | null }>;
+  currencyType?: string;
 }
 
 export const InlineEditCell = ({ 
@@ -23,7 +25,9 @@ export const InlineEditCell = ({
   dealId, 
   onSave, 
   type = 'text',
-  options = []
+  options = [],
+  userOptions = [],
+  currencyType = 'EUR'
 }: InlineEditCellProps) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(value || '');
@@ -62,8 +66,8 @@ export const InlineEditCell = ({
     if (value === null || value === undefined || value === '') return '-';
     
     if (type === 'currency') {
-      const symbols = { USD: '$', EUR: '€', INR: '₹' };
-      return `${symbols[value.currency_type as keyof typeof symbols] || '€'}${Number(value).toLocaleString()}`;
+      const symbols: Record<string, string> = { USD: '$', EUR: '€', INR: '₹' };
+      return `${symbols[currencyType] || '€'}${Number(value).toLocaleString()}`;
     }
     
     if (type === 'date' && value) {
@@ -87,6 +91,11 @@ export const InlineEditCell = ({
         5: 'Lowest'
       };
       return `${value} (${priorityLabels[value] || 'Unknown'})`;
+    }
+
+    if (type === 'userSelect' && value) {
+      const user = userOptions.find(u => u.id === value);
+      return user?.full_name || value;
     }
     
     return String(value);
@@ -216,6 +225,22 @@ export const InlineEditCell = ({
               {options.map(option => (
                 <SelectItem key={option} value={option}>
                   {option}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        );
+
+      case 'userSelect':
+        return (
+          <Select value={editValue} onValueChange={setEditValue}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select user" />
+            </SelectTrigger>
+            <SelectContent>
+              {userOptions.map(user => (
+                <SelectItem key={user.id} value={user.id}>
+                  {user.full_name || 'Unknown'}
                 </SelectItem>
               ))}
             </SelectContent>

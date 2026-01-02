@@ -727,6 +727,44 @@ export type Database = {
           },
         ]
       }
+      deal_stage_history: {
+        Row: {
+          changed_at: string
+          changed_by: string | null
+          deal_id: string
+          from_stage: string | null
+          id: string
+          notes: string | null
+          to_stage: string
+        }
+        Insert: {
+          changed_at?: string
+          changed_by?: string | null
+          deal_id: string
+          from_stage?: string | null
+          id?: string
+          notes?: string | null
+          to_stage: string
+        }
+        Update: {
+          changed_at?: string
+          changed_by?: string | null
+          deal_id?: string
+          from_stage?: string | null
+          id?: string
+          notes?: string | null
+          to_stage?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deal_stage_history_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "deals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       deals: {
         Row: {
           account_id: string | null
@@ -734,6 +772,7 @@ export type Database = {
           budget: string | null
           business_value: string | null
           closing: string | null
+          contact_id: string | null
           created_at: string | null
           created_by: string | null
           currency_type: string | null
@@ -783,6 +822,7 @@ export type Database = {
           budget?: string | null
           business_value?: string | null
           closing?: string | null
+          contact_id?: string | null
           created_at?: string | null
           created_by?: string | null
           currency_type?: string | null
@@ -832,6 +872,7 @@ export type Database = {
           budget?: string | null
           business_value?: string | null
           closing?: string | null
+          contact_id?: string | null
           created_at?: string | null
           created_by?: string | null
           currency_type?: string | null
@@ -881,6 +922,13 @@ export type Database = {
             columns: ["account_id"]
             isOneToOne: false
             referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deals_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
             referencedColumns: ["id"]
           },
         ]

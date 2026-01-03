@@ -50,6 +50,10 @@ interface NotificationPrefs {
   task_reminders: boolean;
   meeting_reminders: boolean;
   weekly_digest: boolean;
+  notification_frequency: 'instant' | 'daily' | 'weekly';
+  leads_notifications: boolean;
+  contacts_notifications: boolean;
+  accounts_notifications: boolean;
 }
 
 interface DisplayPrefs {
@@ -117,6 +121,10 @@ const AccountSettingsPage = () => {
     task_reminders: true,
     meeting_reminders: true,
     weekly_digest: false,
+    notification_frequency: 'instant',
+    leads_notifications: true,
+    contacts_notifications: true,
+    accounts_notifications: true,
   });
 
   const [displayPrefs, setDisplayPrefs] = useState<DisplayPrefs>({
@@ -217,6 +225,10 @@ const AccountSettingsPage = () => {
         task_reminders: notifData?.task_reminders ?? true,
         meeting_reminders: notifData?.meeting_reminders ?? true,
         weekly_digest: notifData?.weekly_digest ?? false,
+        notification_frequency: (notifData?.notification_frequency as 'instant' | 'daily' | 'weekly') ?? 'instant',
+        leads_notifications: notifData?.leads_notifications ?? true,
+        contacts_notifications: notifData?.contacts_notifications ?? true,
+        accounts_notifications: notifData?.accounts_notifications ?? true,
       };
       setNotificationPrefs(loadedNotifPrefs);
 

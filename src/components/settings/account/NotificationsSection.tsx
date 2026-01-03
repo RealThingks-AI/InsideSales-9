@@ -1,7 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Bell } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Bell, Clock, Building2, Users, UserCheck } from 'lucide-react';
 
 interface NotificationPrefs {
   email_notifications: boolean;
@@ -12,6 +13,10 @@ interface NotificationPrefs {
   task_reminders: boolean;
   meeting_reminders: boolean;
   weekly_digest: boolean;
+  notification_frequency: 'instant' | 'daily' | 'weekly';
+  leads_notifications: boolean;
+  contacts_notifications: boolean;
+  accounts_notifications: boolean;
 }
 
 interface NotificationsSectionProps {
@@ -34,8 +39,18 @@ const NotificationsSection = ({ notificationPrefs, setNotificationPrefs }: Notif
     { key: 'weekly_digest' as const, label: 'Weekly Digest' },
   ];
 
+  const moduleNotifications = [
+    { key: 'leads_notifications' as const, label: 'Leads', icon: UserCheck, description: 'All lead-related notifications' },
+    { key: 'contacts_notifications' as const, label: 'Contacts', icon: Users, description: 'All contact-related notifications' },
+    { key: 'accounts_notifications' as const, label: 'Accounts', icon: Building2, description: 'All account-related notifications' },
+  ];
+
   const togglePref = (key: keyof NotificationPrefs) => {
     setNotificationPrefs(p => ({ ...p, [key]: !p[key] }));
+  };
+
+  const handleFrequencyChange = (value: 'instant' | 'daily' | 'weekly') => {
+    setNotificationPrefs(p => ({ ...p, notification_frequency: value }));
   };
 
   return (
@@ -47,6 +62,31 @@ const NotificationsSection = ({ notificationPrefs, setNotificationPrefs }: Notif
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-5">
+        {/* Notification Frequency */}
+        <div className="space-y-3">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Delivery Frequency</p>
+          <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
+            <Clock className="h-4 w-4 text-muted-foreground" />
+            <div className="flex-1">
+              <Label htmlFor="notification-frequency" className="text-sm font-medium">How often to receive notifications</Label>
+              <p className="text-xs text-muted-foreground">Choose between instant, daily digest, or weekly summary</p>
+            </div>
+            <Select 
+              value={notificationPrefs.notification_frequency || 'instant'} 
+              onValueChange={handleFrequencyChange}
+            >
+              <SelectTrigger className="w-[140px]" id="notification-frequency">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="instant">Instant</SelectItem>
+                <SelectItem value="daily">Daily Digest</SelectItem>
+                <SelectItem value="weekly">Weekly Summary</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
         {/* Delivery Methods */}
         <div className="space-y-3">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Delivery Methods</p>
@@ -56,6 +96,29 @@ const NotificationsSection = ({ notificationPrefs, setNotificationPrefs }: Notif
                 <div className="space-y-0.5">
                   <Label htmlFor={key} className="text-sm font-medium cursor-pointer">{label}</Label>
                   <p className="text-xs text-muted-foreground">{description}</p>
+                </div>
+                <Switch
+                  id={key}
+                  checked={notificationPrefs[key]}
+                  onCheckedChange={() => togglePref(key)}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Per-Module Notifications */}
+        <div className="space-y-3 pt-3 border-t">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Module Notifications</p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {moduleNotifications.map(({ key, label, icon: Icon, description }) => (
+              <div key={key} className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
+                <div className="flex items-center gap-2">
+                  <Icon className="h-4 w-4 text-muted-foreground" />
+                  <div className="space-y-0.5">
+                    <Label htmlFor={key} className="text-sm font-medium cursor-pointer">{label}</Label>
+                    <p className="text-xs text-muted-foreground">{description}</p>
+                  </div>
                 </div>
                 <Switch
                   id={key}

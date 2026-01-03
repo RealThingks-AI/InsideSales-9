@@ -1502,13 +1502,17 @@ export type Database = {
       }
       notification_preferences: {
         Row: {
+          accounts_notifications: boolean | null
+          contacts_notifications: boolean | null
           created_at: string
           deal_updates: boolean | null
           email_notifications: boolean | null
           id: string
           in_app_notifications: boolean | null
           lead_assigned: boolean | null
+          leads_notifications: boolean | null
           meeting_reminders: boolean | null
+          notification_frequency: string | null
           push_notifications: boolean | null
           task_reminders: boolean | null
           updated_at: string
@@ -1516,13 +1520,17 @@ export type Database = {
           weekly_digest: boolean | null
         }
         Insert: {
+          accounts_notifications?: boolean | null
+          contacts_notifications?: boolean | null
           created_at?: string
           deal_updates?: boolean | null
           email_notifications?: boolean | null
           id?: string
           in_app_notifications?: boolean | null
           lead_assigned?: boolean | null
+          leads_notifications?: boolean | null
           meeting_reminders?: boolean | null
+          notification_frequency?: string | null
           push_notifications?: boolean | null
           task_reminders?: boolean | null
           updated_at?: string
@@ -1530,13 +1538,17 @@ export type Database = {
           weekly_digest?: boolean | null
         }
         Update: {
+          accounts_notifications?: boolean | null
+          contacts_notifications?: boolean | null
           created_at?: string
           deal_updates?: boolean | null
           email_notifications?: boolean | null
           id?: string
           in_app_notifications?: boolean | null
           lead_assigned?: boolean | null
+          leads_notifications?: boolean | null
           meeting_reminders?: boolean | null
+          notification_frequency?: string | null
           push_notifications?: boolean | null
           task_reminders?: boolean | null
           updated_at?: string
@@ -2052,6 +2064,7 @@ export type Database = {
           currency: string | null
           date_format: string | null
           default_module: string | null
+          email_signature: string | null
           id: string
           language: string | null
           theme: string | null
@@ -2065,6 +2078,7 @@ export type Database = {
           currency?: string | null
           date_format?: string | null
           default_module?: string | null
+          email_signature?: string | null
           id?: string
           language?: string | null
           theme?: string | null
@@ -2078,6 +2092,7 @@ export type Database = {
           currency?: string | null
           date_format?: string | null
           default_module?: string | null
+          email_signature?: string | null
           id?: string
           language?: string | null
           theme?: string | null

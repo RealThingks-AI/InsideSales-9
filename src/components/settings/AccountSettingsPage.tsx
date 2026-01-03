@@ -1,24 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
 import { Progress } from '@/components/ui/progress';
-import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/hooks/useAuth';
 import { useThemePreferences } from '@/hooks/useThemePreferences';
 import { useSecurityAudit } from '@/hooks/useSecurityAudit';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { format } from 'date-fns';
-import {
-  User, Mail, Phone, Globe, Loader2, Key, Bell, Settings, Sun, Moon, 
-  Check, X, Monitor, Smartphone, Tablet, Clock, MapPin, LogOut, RefreshCw,
-  Eye, EyeOff, Trash2
-} from 'lucide-react';
+import { Loader2, Key, Check, X, Eye, EyeOff } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -38,17 +28,10 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
-const timezones = [
-  { value: 'Asia/Kolkata', label: 'IST (India Standard Time)' },
-  { value: 'America/New_York', label: 'EST (Eastern Standard Time)' },
-  { value: 'America/Los_Angeles', label: 'PST (Pacific Standard Time)' },
-  { value: 'Europe/London', label: 'GMT (Greenwich Mean Time)' },
-  { value: 'Europe/Paris', label: 'CET (Central European Time)' },
-  { value: 'Asia/Tokyo', label: 'JST (Japan Standard Time)' },
-  { value: 'Asia/Singapore', label: 'SGT (Singapore Time)' },
-  { value: 'Australia/Sydney', label: 'AEST (Australian Eastern Time)' },
-  { value: 'Asia/Dubai', label: 'GST (Gulf Standard Time)' }
-];
+import ProfileSection from './account/ProfileSection';
+import SecuritySection from './account/SecuritySection';
+import NotificationsSection from './account/NotificationsSection';
+import DisplayPreferencesSection from './account/DisplayPreferencesSection';
 
 interface ProfileData {
   full_name: string;
@@ -97,7 +80,7 @@ interface PasswordRequirement {
 }
 
 const AccountSettingsPage = () => {
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const { theme, setTheme } = useThemePreferences();
   const { logSecurityEvent } = useSecurityAudit();
   
@@ -110,10 +93,7 @@ const AccountSettingsPage = () => {
   const [loadingSessions, setLoadingSessions] = useState(true);
   const [terminatingSession, setTerminatingSession] = useState<string | null>(null);
   const [showTerminateAllDialog, setShowTerminateAllDialog] = useState(false);
-  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
-  const [removingAvatar, setRemovingAvatar] = useState(false);
 
-  // Track initial values to detect changes
   const initialDataRef = useRef<{
     profile: ProfileData;
     notificationPrefs: NotificationPrefs;
@@ -154,7 +134,6 @@ const AccountSettingsPage = () => {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // Check if there are unsaved changes
   const hasUnsavedChanges = useCallback(() => {
     if (!initialDataRef.current) return false;
     const { profile: initProfile, notificationPrefs: initNotif, displayPrefs: initDisplay } = initialDataRef.current;
@@ -166,20 +145,18 @@ const AccountSettingsPage = () => {
     );
   }, [profile, notificationPrefs, displayPrefs]);
 
-  // Password validation
   const passwordRequirements: PasswordRequirement[] = [
     { label: 'At least 8 characters', met: passwordData.newPassword.length >= 8 },
-    { label: 'At least one uppercase letter', met: /[A-Z]/.test(passwordData.newPassword) },
-    { label: 'At least one lowercase letter', met: /[a-z]/.test(passwordData.newPassword) },
-    { label: 'At least one number', met: /\d/.test(passwordData.newPassword) },
-    { label: 'At least one special character', met: /[!@#$%^&*(),.?":{}|<>]/.test(passwordData.newPassword) },
+    { label: 'One uppercase letter', met: /[A-Z]/.test(passwordData.newPassword) },
+    { label: 'One lowercase letter', met: /[a-z]/.test(passwordData.newPassword) },
+    { label: 'One number', met: /\d/.test(passwordData.newPassword) },
+    { label: 'One special character', met: /[!@#$%^&*(),.?":{}|<>]/.test(passwordData.newPassword) },
   ];
 
   const allRequirementsMet = passwordRequirements.every(req => req.met);
   const passwordsMatch = passwordData.newPassword === passwordData.confirmPassword && passwordData.confirmPassword.length > 0;
   const passwordStrength = (passwordRequirements.filter(req => req.met).length / passwordRequirements.length) * 100;
 
-  // Warn user before leaving with unsaved changes
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (hasUnsavedChanges()) {
@@ -187,7 +164,6 @@ const AccountSettingsPage = () => {
         e.returnValue = '';
       }
     };
-
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [hasUnsavedChanges]);
@@ -202,7 +178,6 @@ const AccountSettingsPage = () => {
   const fetchCurrentSessionToken = async () => {
     const { data } = await supabase.auth.getSession();
     if (data.session?.access_token) {
-      // Use a hash or portion of the token for comparison
       setCurrentSessionToken(data.session.access_token.substring(0, 20));
     }
   };
@@ -212,7 +187,6 @@ const AccountSettingsPage = () => {
     setLoading(true);
     
     try {
-      // Fetch profile
       const { data: profileData } = await supabase
         .from('profiles')
         .select('*')
@@ -228,7 +202,6 @@ const AccountSettingsPage = () => {
       };
       setProfile(loadedProfile);
 
-      // Fetch notification preferences
       const { data: notifData } = await supabase
         .from('notification_preferences')
         .select('*')
@@ -247,7 +220,6 @@ const AccountSettingsPage = () => {
       };
       setNotificationPrefs(loadedNotifPrefs);
 
-      // Fetch display preferences
       const { data: displayData } = await supabase
         .from('user_preferences')
         .select('*')
@@ -262,14 +234,12 @@ const AccountSettingsPage = () => {
       };
       setDisplayPrefs(loadedDisplayPrefs);
 
-      // Store initial values
       initialDataRef.current = {
         profile: loadedProfile,
         notificationPrefs: loadedNotifPrefs,
         displayPrefs: loadedDisplayPrefs
       };
 
-      // Fetch sessions
       await fetchSessions();
     } catch (error) {
       console.error('Error fetching settings:', error);
@@ -309,7 +279,6 @@ const AccountSettingsPage = () => {
     setSaving(true);
 
     try {
-      // Save profile
       await supabase.from('profiles').upsert({
         id: user.id,
         full_name: profile.full_name,
@@ -320,14 +289,12 @@ const AccountSettingsPage = () => {
         updated_at: new Date().toISOString()
       });
 
-      // Save notification preferences
       await supabase.from('notification_preferences').upsert({
         user_id: user.id,
         ...notificationPrefs,
         updated_at: new Date().toISOString(),
       });
 
-      // Save display preferences
       await supabase.from('user_preferences').upsert({
         user_id: user.id,
         theme,
@@ -335,7 +302,6 @@ const AccountSettingsPage = () => {
         updated_at: new Date().toISOString(),
       });
 
-      // Update initial values after successful save
       initialDataRef.current = {
         profile,
         notificationPrefs,
@@ -378,11 +344,6 @@ const AccountSettingsPage = () => {
     }
   };
 
-  const isCurrentSession = (session: Session) => {
-    // Compare session tokens to identify current session
-    return session.session_token?.substring(0, 20) === currentSessionToken;
-  };
-
   const terminateSession = async (sessionId: string) => {
     try {
       const { error } = await supabase
@@ -405,8 +366,7 @@ const AccountSettingsPage = () => {
     if (!user) return;
 
     try {
-      // Get current session to exclude it
-      const currentSession = sessions.find(s => isCurrentSession(s));
+      const currentSession = sessions.find(s => s.session_token?.substring(0, 20) === currentSessionToken);
       
       const { error } = await supabase
         .from('user_sessions')
@@ -425,76 +385,6 @@ const AccountSettingsPage = () => {
     }
   };
 
-  const handleAvatarUpload = async (file: File) => {
-    if (!user) return;
-    try {
-      const fileExt = file.name.split('.').pop();
-      const filePath = `${user.id}/avatar.${fileExt}`;
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(filePath, file, { upsert: true });
-      if (uploadError) throw uploadError;
-      const { data: urlData } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(filePath);
-      setProfile(p => ({ ...p, avatar_url: urlData.publicUrl + '?t=' + Date.now() }));
-      toast.success('Profile picture updated');
-    } catch (error: any) {
-      if (error.message?.includes('bucket')) {
-        toast.error('Avatar storage is not configured. Please contact support.');
-      } else {
-        toast.error('Failed to upload profile picture');
-      }
-    }
-  };
-
-  const handleRemoveAvatar = async () => {
-    if (!user || !profile.avatar_url) return;
-    setRemovingAvatar(true);
-    
-    try {
-      // Remove from storage
-      const { error: deleteError } = await supabase.storage
-        .from('avatars')
-        .remove([`${user.id}/avatar.png`, `${user.id}/avatar.jpg`, `${user.id}/avatar.jpeg`, `${user.id}/avatar.webp`]);
-      
-      // Update profile
-      setProfile(p => ({ ...p, avatar_url: '' }));
-      toast.success('Profile picture removed');
-    } catch (error) {
-      toast.error('Failed to remove profile picture');
-    } finally {
-      setRemovingAvatar(false);
-    }
-  };
-
-  const getDeviceIcon = (deviceInfo: Session['device_info']) => {
-    const device = deviceInfo?.device?.toLowerCase() || '';
-    if (device.includes('mobile') || device.includes('phone')) return <Smartphone className="h-5 w-5" />;
-    if (device.includes('tablet') || device.includes('ipad')) return <Tablet className="h-5 w-5" />;
-    return <Monitor className="h-5 w-5" />;
-  };
-
-  const parseUserAgent = (userAgent: string | null): { browser: string; os: string } => {
-    if (!userAgent) return { browser: 'Unknown', os: 'Unknown' };
-    let browser = 'Unknown Browser';
-    let os = 'Unknown OS';
-    if (userAgent.includes('Chrome') && !userAgent.includes('Edg')) browser = 'Chrome';
-    else if (userAgent.includes('Firefox')) browser = 'Firefox';
-    else if (userAgent.includes('Safari') && !userAgent.includes('Chrome')) browser = 'Safari';
-    else if (userAgent.includes('Edg')) browser = 'Edge';
-    if (userAgent.includes('Windows')) os = 'Windows';
-    else if (userAgent.includes('Mac')) os = 'macOS';
-    else if (userAgent.includes('Linux')) os = 'Linux';
-    else if (userAgent.includes('Android')) os = 'Android';
-    else if (userAgent.includes('iPhone') || userAgent.includes('iPad')) os = 'iOS';
-    return { browser, os };
-  };
-
-  const getInitials = (name: string) => {
-    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -504,10 +394,10 @@ const AccountSettingsPage = () => {
   }
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6 max-w-3xl pb-6">
       {/* Unsaved Changes Indicator */}
       {hasUnsavedChanges() && (
-        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 flex items-center justify-between">
+        <div className="sticky top-0 z-10 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 flex items-center justify-between shadow-sm">
           <p className="text-sm text-amber-800 dark:text-amber-200">You have unsaved changes</p>
           <Button size="sm" onClick={handleSaveAll} disabled={saving}>
             {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Save Now'}
@@ -516,371 +406,36 @@ const AccountSettingsPage = () => {
       )}
 
       {/* Profile Section */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <User className="h-4 w-4" />
-            Profile Information
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-start gap-4">
-            <div className="flex-shrink-0">
-              <div className="relative group">
-                <Avatar className="h-16 w-16 cursor-pointer" onClick={() => {
-                  const input = document.createElement('input');
-                  input.type = 'file';
-                  input.accept = 'image/*';
-                  input.onchange = (e) => {
-                    const file = (e.target as HTMLInputElement).files?.[0];
-                    if (file) handleAvatarUpload(file);
-                  };
-                  input.click();
-                }}>
-                  <AvatarImage src={profile.avatar_url} alt={profile.full_name} />
-                  <AvatarFallback className="text-sm">{getInitials(profile.full_name || 'U')}</AvatarFallback>
-                </Avatar>
-                <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
-                  <span className="text-white text-xs">Change</span>
-                </div>
-              </div>
-              <div className="flex flex-col items-center gap-1 mt-1">
-                <p className="text-xs text-muted-foreground">Click to change</p>
-                {profile.avatar_url && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 text-xs text-destructive hover:text-destructive"
-                    onClick={handleRemoveAvatar}
-                    disabled={removingAvatar}
-                    aria-label="Remove profile picture"
-                  >
-                    {removingAvatar ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3 mr-1" />}
-                    Remove
-                  </Button>
-                )}
-              </div>
-            </div>
-
-            <div className="flex-1 grid gap-3 md:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="full_name" className="text-xs">Full Name</Label>
-                <Input
-                  id="full_name"
-                  value={profile.full_name}
-                  onChange={e => setProfile(p => ({ ...p, full_name: e.target.value }))}
-                  placeholder="Enter your full name"
-                  className="h-9"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="email" className="text-xs">Email</Label>
-                <div className="relative">
-                  <Mail className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="email"
-                    type="email"
-                    value={profile.email}
-                    readOnly
-                    disabled
-                    className="pl-8 h-9 bg-muted/50 cursor-not-allowed"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="phone" className="text-xs">Phone</Label>
-              <div className="relative">
-                <Phone className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="phone"
-                  value={profile.phone}
-                  onChange={e => {
-                    let value = e.target.value.replace(/[^\d+\s()-]/g, '');
-                    setProfile(p => ({ ...p, phone: value }));
-                  }}
-                  placeholder="+1 234 567 8900"
-                  className="pl-8 h-9"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="timezone" className="text-xs">Timezone</Label>
-              <div className="relative">
-                <Globe className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground z-10" />
-                <Select
-                  value={profile.timezone}
-                  onValueChange={value => setProfile(p => ({ ...p, timezone: value }))}
-                >
-                  <SelectTrigger className="pl-8 h-9">
-                    <SelectValue placeholder="Select timezone" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {timezones.map(tz => (
-                      <SelectItem key={tz.value} value={tz.value}>{tz.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <ProfileSection 
+        profile={profile} 
+        setProfile={setProfile} 
+        userId={user?.id} 
+      />
 
       {/* Security Section */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Key className="h-4 w-4" />
-            Security
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium">Password</p>
-              <p className="text-xs text-muted-foreground">Update your password to keep your account secure</p>
-            </div>
-            <Button variant="outline" size="sm" onClick={() => setShowPasswordModal(true)}>
-              <Key className="h-3.5 w-3.5 mr-1.5" />
-              Change Password
-            </Button>
-          </div>
-
-          {/* Active Sessions */}
-          <div className="pt-4 border-t">
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <p className="text-sm font-medium">Active Sessions</p>
-                <p className="text-xs text-muted-foreground">Manage your logged-in devices</p>
-              </div>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={fetchSessions} disabled={loadingSessions} aria-label="Refresh sessions">
-                  <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${loadingSessions ? 'animate-spin' : ''}`} />
-                  Refresh
-                </Button>
-                {sessions.filter(s => !isCurrentSession(s)).length > 0 && (
-                  <Button variant="destructive" size="sm" onClick={() => setShowTerminateAllDialog(true)}>
-                    <LogOut className="h-3.5 w-3.5 mr-1.5" />
-                    Sign Out All Others
-                  </Button>
-                )}
-              </div>
-            </div>
-
-            {loadingSessions ? (
-              <div className="flex justify-center py-4">
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              </div>
-            ) : sessions.length === 0 ? (
-              <p className="text-center text-sm text-muted-foreground py-4">No active sessions found</p>
-            ) : (
-              <div className="space-y-2">
-                {sessions.map((session) => {
-                  const { browser, os } = parseUserAgent(session.user_agent);
-                  const isCurrent = isCurrentSession(session);
-                  return (
-                    <div key={session.id} className="flex items-center justify-between p-3 border rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-muted rounded-lg">{getDeviceIcon(session.device_info)}</div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium">{browser} on {os}</span>
-                            {isCurrent && <Badge variant="secondary" className="text-xs">Current</Badge>}
-                          </div>
-                          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                            {session.ip_address && (
-                              <span className="flex items-center gap-1">
-                                <MapPin className="h-3 w-3" />{session.ip_address}
-                              </span>
-                            )}
-                            <span className="flex items-center gap-1">
-                              <Clock className="h-3 w-3" />
-                              Last active: {format(new Date(session.last_active_at), 'dd/MM, HH:mm')}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      {!isCurrent && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => setTerminatingSession(session.id)}
-                          aria-label={`Sign out ${browser} on ${os}`}
-                        >
-                          <LogOut className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+      <SecuritySection
+        sessions={sessions}
+        loadingSessions={loadingSessions}
+        currentSessionToken={currentSessionToken}
+        onShowPasswordModal={() => setShowPasswordModal(true)}
+        onRefreshSessions={fetchSessions}
+        onTerminateSession={(id) => setTerminatingSession(id)}
+        onTerminateAllOthers={() => setShowTerminateAllDialog(true)}
+      />
 
       {/* Notifications Section */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Bell className="h-4 w-4" />
-            Notifications
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Delivery Methods</p>
-            <div className="grid gap-2">
-              {[
-                { key: 'email_notifications', label: 'Email' },
-                { key: 'in_app_notifications', label: 'In-App' },
-                { key: 'push_notifications', label: 'Push' },
-              ].map(({ key, label }) => (
-                <div key={key} className="flex items-center justify-between py-1">
-                  <Label htmlFor={key} className="text-sm cursor-pointer">{label}</Label>
-                  <Switch
-                    id={key}
-                    checked={notificationPrefs[key as keyof NotificationPrefs] as boolean}
-                    onCheckedChange={() => setNotificationPrefs(p => ({ ...p, [key]: !p[key as keyof NotificationPrefs] }))}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-2 pt-2 border-t">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Event Triggers</p>
-            <div className="grid gap-2">
-              {[
-                { key: 'lead_assigned', label: 'Lead Assigned' },
-                { key: 'deal_updates', label: 'Deal Updates' },
-                { key: 'task_reminders', label: 'Task Reminders' },
-                { key: 'meeting_reminders', label: 'Meeting Reminders' },
-                { key: 'weekly_digest', label: 'Weekly Digest' },
-              ].map(({ key, label }) => (
-                <div key={key} className="flex items-center justify-between py-1">
-                  <Label htmlFor={key} className="text-sm cursor-pointer">{label}</Label>
-                  <Switch
-                    id={key}
-                    checked={notificationPrefs[key as keyof NotificationPrefs] as boolean}
-                    onCheckedChange={() => setNotificationPrefs(p => ({ ...p, [key]: !p[key as keyof NotificationPrefs] }))}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <NotificationsSection
+        notificationPrefs={notificationPrefs}
+        setNotificationPrefs={setNotificationPrefs}
+      />
 
       {/* Display Preferences Section */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Settings className="h-4 w-4" />
-            Display Preferences
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-3 md:grid-cols-2">
-          <div className="space-y-1.5">
-              <Label className="text-xs">Theme</Label>
-              <Select value={theme} onValueChange={(value) => setTheme(value as 'light' | 'dark' | 'system')}>
-                <SelectTrigger className="h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="light">
-                    <div className="flex items-center gap-2"><Sun className="h-3.5 w-3.5" />Light</div>
-                  </SelectItem>
-                  <SelectItem value="dark">
-                    <div className="flex items-center gap-2"><Moon className="h-3.5 w-3.5" />Dark</div>
-                  </SelectItem>
-                  <SelectItem value="system">
-                    <div className="flex items-center gap-2"><Monitor className="h-3.5 w-3.5" />System</div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs">Default Module</Label>
-              <Select
-                value={displayPrefs.default_module}
-                onValueChange={(value) => setDisplayPrefs(p => ({ ...p, default_module: value }))}
-              >
-                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="dashboard">Dashboard</SelectItem>
-                  <SelectItem value="leads">Leads</SelectItem>
-                  <SelectItem value="deals">Deals</SelectItem>
-                  <SelectItem value="contacts">Contacts</SelectItem>
-                  <SelectItem value="accounts">Accounts</SelectItem>
-                  <SelectItem value="tasks">Tasks</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Date Format</Label>
-              <Select
-                value={displayPrefs.date_format}
-                onValueChange={(value) => setDisplayPrefs(p => ({ ...p, date_format: value }))}
-              >
-                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="DD/MM/YYYY">DD/MM/YYYY (31/12/2024)</SelectItem>
-                  <SelectItem value="MM/DD/YYYY">MM/DD/YYYY (12/31/2024)</SelectItem>
-                  <SelectItem value="YYYY-MM-DD">YYYY-MM-DD (2024-12-31)</SelectItem>
-                  <SelectItem value="DD-MMM-YYYY">DD-MMM-YYYY (31-Dec-2024)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs">Time Format</Label>
-              <Select
-                value={displayPrefs.time_format}
-                onValueChange={(value) => setDisplayPrefs(p => ({ ...p, time_format: value }))}
-              >
-                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="12h">12-hour (3:30 PM)</SelectItem>
-                  <SelectItem value="24h">24-hour (15:30)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Currency</Label>
-              <Select
-                value={displayPrefs.currency}
-                onValueChange={(value) => setDisplayPrefs(p => ({ ...p, currency: value }))}
-              >
-                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="INR">₹ INR (Indian Rupee)</SelectItem>
-                  <SelectItem value="USD">$ USD (US Dollar)</SelectItem>
-                  <SelectItem value="EUR">€ EUR (Euro)</SelectItem>
-                  <SelectItem value="GBP">£ GBP (British Pound)</SelectItem>
-                  <SelectItem value="AED">د.إ AED (UAE Dirham)</SelectItem>
-                  <SelectItem value="SGD">S$ SGD (Singapore Dollar)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <DisplayPreferencesSection
+        displayPrefs={displayPrefs}
+        setDisplayPrefs={setDisplayPrefs}
+        theme={theme}
+        setTheme={setTheme}
+      />
 
       {/* Save All Button */}
       <div className="flex justify-end pt-4 border-t">
@@ -933,7 +488,7 @@ const AccountSettingsPage = () => {
               {passwordData.newPassword.length > 0 && (
                 <div className="space-y-2 mt-2">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">Password strength</span>
+                    <span className="text-muted-foreground">Strength</span>
                     <span className={`font-medium ${passwordStrength < 40 ? 'text-destructive' : passwordStrength < 80 ? 'text-yellow-600' : 'text-green-600'}`}>
                       {passwordStrength < 40 ? 'Weak' : passwordStrength < 80 ? 'Medium' : 'Strong'}
                     </span>
@@ -946,12 +501,14 @@ const AccountSettingsPage = () => {
             {passwordData.newPassword.length > 0 && (
               <div className="space-y-1.5 p-3 bg-muted/50 rounded-lg">
                 <p className="text-xs font-medium text-muted-foreground mb-2">Requirements:</p>
-                {passwordRequirements.map((req, index) => (
-                  <div key={index} className="flex items-center gap-2 text-xs">
-                    {req.met ? <Check className="h-3.5 w-3.5 text-green-500" /> : <X className="h-3.5 w-3.5 text-muted-foreground" />}
-                    <span className={req.met ? 'text-foreground' : 'text-muted-foreground'}>{req.label}</span>
-                  </div>
-                ))}
+                <div className="grid grid-cols-2 gap-1">
+                  {passwordRequirements.map((req, index) => (
+                    <div key={index} className="flex items-center gap-1.5 text-xs">
+                      {req.met ? <Check className="h-3 w-3 text-green-500" /> : <X className="h-3 w-3 text-muted-foreground" />}
+                      <span className={req.met ? 'text-foreground' : 'text-muted-foreground'}>{req.label}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
             
@@ -981,9 +538,9 @@ const AccountSettingsPage = () => {
               {passwordData.confirmPassword.length > 0 && (
                 <div className="flex items-center gap-1.5 text-xs mt-1">
                   {passwordsMatch ? (
-                    <><Check className="h-3.5 w-3.5 text-green-500" /><span className="text-green-600">Passwords match</span></>
+                    <><Check className="h-3 w-3 text-green-500" /><span className="text-green-600">Passwords match</span></>
                   ) : (
-                    <><X className="h-3.5 w-3.5 text-destructive" /><span className="text-destructive">Passwords do not match</span></>
+                    <><X className="h-3 w-3 text-destructive" /><span className="text-destructive">Passwords do not match</span></>
                   )}
                 </div>
               )}
@@ -1021,7 +578,7 @@ const AccountSettingsPage = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>Sign Out All Other Sessions</AlertDialogTitle>
             <AlertDialogDescription>
-              This will sign out all devices except the current one. You'll need to log in again on those devices.
+              This will sign out all devices except the current one.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

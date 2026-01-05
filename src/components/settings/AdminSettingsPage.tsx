@@ -22,33 +22,48 @@ const ApprovalWorkflowSettings = lazy(() => import('@/components/settings/Approv
 const BrandingSettings = lazy(() => import('@/components/settings/BrandingSettings'));
 
 // Loading skeleton for lazy-loaded sections
-const SectionLoadingSkeleton = () => (
-  <div className="space-y-4">
+const SectionLoadingSkeleton = () => <div className="space-y-4">
     <Skeleton className="h-8 w-48" />
     <Skeleton className="h-4 w-full max-w-md" />
     <div className="grid gap-4 mt-4">
       <Skeleton className="h-20 w-full" />
       <Skeleton className="h-20 w-full" />
     </div>
-  </div>
-);
+  </div>;
 
 // Tab definitions with grouped sections
-const adminTabs = [
-  { id: 'users', label: 'Users', icon: Users },
-  { id: 'access', label: 'Access', icon: Lock },
-  { id: 'config', label: 'Config', icon: Settings2 },
-  { id: 'system', label: 'System', icon: Activity },
-  { id: 'reports', label: 'Reports', icon: BarChart3 },
-];
-
+const adminTabs = [{
+  id: 'users',
+  label: 'Users',
+  icon: Users
+}, {
+  id: 'access',
+  label: 'Access',
+  icon: Lock
+}, {
+  id: 'config',
+  label: 'Config',
+  icon: Settings2
+}, {
+  id: 'system',
+  label: 'System',
+  icon: Activity
+}, {
+  id: 'reports',
+  label: 'Reports',
+  icon: BarChart3
+}];
 interface AdminSettingsPageProps {
   defaultSection?: string | null;
 }
+const AdminSettingsPage = ({
+  defaultSection
+}: AdminSettingsPageProps) => {
+  const {
+    userRole,
+    loading: roleLoading
+  } = useUserRole();
 
-const AdminSettingsPage = ({ defaultSection }: AdminSettingsPageProps) => {
-  const { userRole, loading: roleLoading } = useUserRole();
-  
   // Map sections to tabs
   const getTabFromSection = (section: string | null) => {
     if (!section) return 'users';
@@ -63,32 +78,24 @@ const AdminSettingsPage = ({ defaultSection }: AdminSettingsPageProps) => {
       'audit-logs': 'system',
       'system-status': 'system',
       'scheduled-reports': 'reports',
-      'announcements': 'reports',
+      'announcements': 'reports'
     };
     return sectionToTab[section] || 'users';
   };
-
   const [activeTab, setActiveTab] = useState(() => getTabFromSection(defaultSection));
-
   useEffect(() => {
     if (defaultSection) {
       setActiveTab(getTabFromSection(defaultSection));
     }
   }, [defaultSection]);
-
   const isAdmin = userRole === 'admin';
-
   if (roleLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
+    return <div className="flex items-center justify-center h-64">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+      </div>;
   }
-
   if (!isAdmin) {
-    return (
-      <Card>
+    return <Card>
         <CardContent className="py-16">
           <div className="flex flex-col items-center justify-center text-center">
             <ShieldAlert className="h-16 w-16 text-muted-foreground mb-4" />
@@ -99,30 +106,23 @@ const AdminSettingsPage = ({ defaultSection }: AdminSettingsPageProps) => {
             </p>
           </div>
         </CardContent>
-      </Card>
-    );
+      </Card>;
   }
-
-  return (
-    <div className="space-y-6 max-w-6xl">
+  return <div className="space-y-6 max-w-6xl">
       <div className="mb-6">
-        <h2 className="text-lg font-semibold">Administration</h2>
-        <p className="text-sm text-muted-foreground">
-          Manage users, permissions, and system configuration
-        </p>
+        
+        
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-5 max-w-xl">
-          {adminTabs.map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <TabsTrigger key={tab.id} value={tab.id} className="flex items-center gap-2">
+          {adminTabs.map(tab => {
+          const Icon = tab.icon;
+          return <TabsTrigger key={tab.id} value={tab.id} className="flex items-center gap-2">
                 <Icon className="h-4 w-4" />
                 <span className="sr-only sm:not-sr-only">{tab.label}</span>
-              </TabsTrigger>
-            );
-          })}
+              </TabsTrigger>;
+        })}
         </TabsList>
 
         <TabsContent value="users" className="mt-6 space-y-6">
@@ -344,8 +344,6 @@ const AdminSettingsPage = ({ defaultSection }: AdminSettingsPageProps) => {
           </Card>
         </TabsContent>
       </Tabs>
-    </div>
-  );
+    </div>;
 };
-
 export default AdminSettingsPage;

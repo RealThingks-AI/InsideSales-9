@@ -1,12 +1,12 @@
 import { useState, lazy, Suspense, useMemo, useEffect } from 'react';
-import { ChevronDown, Users, Lock, GitBranch, Plug, Database, Shield, Activity, FileText, Megaphone, CheckSquare, Palette, Search } from 'lucide-react';
+import { Users, Lock, GitBranch, Plug, Database, Shield, Activity, FileText, Megaphone, CheckSquare, Palette, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useUserRole } from '@/hooks/useUserRole';
-import { Loader2, ShieldAlert } from 'lucide-react';
+import { Loader2, ShieldAlert, Settings2, BarChart3 } from 'lucide-react';
 
 // Lazy load admin section components
 const UserManagement = lazy(() => import('@/components/UserManagement'));
@@ -21,106 +21,6 @@ const AnnouncementSettings = lazy(() => import('@/components/settings/Announceme
 const ApprovalWorkflowSettings = lazy(() => import('@/components/settings/ApprovalWorkflowSettings'));
 const BrandingSettings = lazy(() => import('@/components/settings/BrandingSettings'));
 
-interface AdminSection {
-  id: string;
-  title: string;
-  description: string;
-  icon: React.ComponentType<{ className?: string }>;
-  component: React.LazyExoticComponent<React.ComponentType>;
-  keywords: string[];
-}
-
-const adminSections: AdminSection[] = [
-  {
-    id: 'users',
-    title: 'User Directory',
-    description: 'Manage user accounts, roles, and permissions',
-    icon: Users,
-    component: UserManagement,
-    keywords: ['user', 'users', 'account', 'role', 'permission', 'team', 'member'],
-  },
-  {
-    id: 'page-access',
-    title: 'Page Access Control',
-    description: 'Configure which roles can access each page',
-    icon: Lock,
-    component: PageAccessSettings,
-    keywords: ['page', 'access', 'control', 'permission', 'role', 'restrict'],
-  },
-  {
-    id: 'pipeline',
-    title: 'Pipeline & Status Management',
-    description: 'Customize deal stages and lead statuses',
-    icon: GitBranch,
-    component: PipelineSettings,
-    keywords: ['pipeline', 'stage', 'status', 'deal', 'lead', 'kanban'],
-  },
-  {
-    id: 'integrations',
-    title: 'Third-Party Integrations',
-    description: 'Connect with Microsoft Teams, Email, and Calendar',
-    icon: Plug,
-    component: IntegrationSettings,
-    keywords: ['integration', 'teams', 'email', 'calendar', 'microsoft', 'connect', 'api'],
-  },
-  {
-    id: 'backup',
-    title: 'Data Backup & Restore',
-    description: 'Export data and manage backups',
-    icon: Database,
-    component: BackupRestoreSettings,
-    keywords: ['backup', 'restore', 'export', 'data', 'recovery'],
-  },
-  {
-    id: 'audit-logs',
-    title: 'Audit Logs',
-    description: 'View system activity and security events',
-    icon: Shield,
-    component: AuditLogsSettings,
-    keywords: ['audit', 'log', 'security', 'activity', 'event', 'history'],
-  },
-  {
-    id: 'system-status',
-    title: 'System Status',
-    description: 'Monitor system health, database stats, and storage usage',
-    icon: Activity,
-    component: SystemStatusSettings,
-    keywords: ['system', 'status', 'health', 'database', 'storage', 'monitor'],
-  },
-  {
-    id: 'scheduled-reports',
-    title: 'Scheduled Reports',
-    description: 'Configure automated email reports',
-    icon: FileText,
-    component: ScheduledReportsSettings,
-    keywords: ['report', 'schedule', 'automated', 'email', 'analytics'],
-  },
-  {
-    id: 'announcements',
-    title: 'Announcement Management',
-    description: 'Create and manage system announcements',
-    icon: Megaphone,
-    component: AnnouncementSettings,
-    keywords: ['announcement', 'banner', 'notification', 'message', 'broadcast'],
-  },
-  {
-    id: 'approval-workflows',
-    title: 'Approval Workflows',
-    description: 'Configure multi-step approval processes',
-    icon: CheckSquare,
-    component: ApprovalWorkflowSettings,
-    keywords: ['approval', 'workflow', 'process', 'step', 'authorize'],
-  },
-  {
-    id: 'branding',
-    title: 'Branding Settings',
-    description: 'Customize app logo, colors, and appearance',
-    icon: Palette,
-    component: BrandingSettings,
-    keywords: ['branding', 'logo', 'color', 'theme', 'appearance', 'style', 'customize'],
-  },
-];
-
 // Loading skeleton for lazy-loaded sections
 const SectionLoadingSkeleton = () => (
   <div className="space-y-4">
@@ -133,50 +33,50 @@ const SectionLoadingSkeleton = () => (
   </div>
 );
 
+// Tab definitions with grouped sections
+const adminTabs = [
+  { id: 'users', label: 'Users', icon: Users },
+  { id: 'access', label: 'Access', icon: Lock },
+  { id: 'config', label: 'Config', icon: Settings2 },
+  { id: 'system', label: 'System', icon: Activity },
+  { id: 'reports', label: 'Reports', icon: BarChart3 },
+];
+
 interface AdminSettingsPageProps {
   defaultSection?: string | null;
 }
 
 const AdminSettingsPage = ({ defaultSection }: AdminSettingsPageProps) => {
   const { userRole, loading: roleLoading } = useUserRole();
-  const [openSections, setOpenSections] = useState<string[]>(() => {
-    if (defaultSection && adminSections.some(s => s.id === defaultSection)) {
-      return [defaultSection];
-    }
-    return ['users'];
-  });
-  const [searchQuery, setSearchQuery] = useState('');
+  
+  // Map sections to tabs
+  const getTabFromSection = (section: string | null) => {
+    if (!section) return 'users';
+    const sectionToTab: Record<string, string> = {
+      'users': 'users',
+      'page-access': 'access',
+      'pipeline': 'config',
+      'integrations': 'config',
+      'branding': 'config',
+      'approval-workflows': 'config',
+      'backup': 'system',
+      'audit-logs': 'system',
+      'system-status': 'system',
+      'scheduled-reports': 'reports',
+      'announcements': 'reports',
+    };
+    return sectionToTab[section] || 'users';
+  };
 
-  // Auto-expand section when defaultSection changes
+  const [activeTab, setActiveTab] = useState(() => getTabFromSection(defaultSection));
+
   useEffect(() => {
-    if (defaultSection && adminSections.some(s => s.id === defaultSection)) {
-      setOpenSections(prev => 
-        prev.includes(defaultSection) ? prev : [defaultSection]
-      );
+    if (defaultSection) {
+      setActiveTab(getTabFromSection(defaultSection));
     }
   }, [defaultSection]);
 
   const isAdmin = userRole === 'admin';
-
-  const toggleSection = (sectionId: string) => {
-    setOpenSections(prev =>
-      prev.includes(sectionId)
-        ? prev.filter(id => id !== sectionId)
-        : [...prev, sectionId]
-    );
-  };
-
-  // Filter sections based on search query
-  const filteredSections = useMemo(() => {
-    if (!searchQuery.trim()) return adminSections;
-    
-    const query = searchQuery.toLowerCase();
-    return adminSections.filter(section => 
-      section.title.toLowerCase().includes(query) ||
-      section.description.toLowerCase().includes(query) ||
-      section.keywords.some(keyword => keyword.includes(query))
-    );
-  }, [searchQuery]);
 
   if (roleLoading) {
     return (
@@ -204,7 +104,7 @@ const AdminSettingsPage = ({ defaultSection }: AdminSettingsPageProps) => {
   }
 
   return (
-    <div className="space-y-4 max-w-6xl">
+    <div className="space-y-6 max-w-6xl">
       <div className="mb-6">
         <h2 className="text-lg font-semibold">Administration</h2>
         <p className="text-sm text-muted-foreground">
@@ -212,78 +112,238 @@ const AdminSettingsPage = ({ defaultSection }: AdminSettingsPageProps) => {
         </p>
       </div>
 
-      {/* Search Bar */}
-      <div className="relative mb-4">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Search settings..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-9"
-          aria-label="Search administration settings"
-        />
-      </div>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="grid w-full grid-cols-5 max-w-xl">
+          {adminTabs.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <TabsTrigger key={tab.id} value={tab.id} className="flex items-center gap-2">
+                <Icon className="h-4 w-4" />
+                <span className="sr-only sm:not-sr-only">{tab.label}</span>
+              </TabsTrigger>
+            );
+          })}
+        </TabsList>
 
-      {filteredSections.length === 0 ? (
-        <Card>
-          <CardContent className="py-8 text-center">
-            <p className="text-muted-foreground">
-              No settings found matching "{searchQuery}"
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        filteredSections.map((section) => {
-          const Icon = section.icon;
-          const isOpen = openSections.includes(section.id);
-          const SectionComponent = section.component;
+        <TabsContent value="users" className="mt-6 space-y-6">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                  <Users className="h-5 w-5" />
+                </div>
+                <div>
+                  <CardTitle className="text-base font-medium">User Directory</CardTitle>
+                  <CardDescription className="text-sm">Manage user accounts, roles, and permissions</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Suspense fallback={<SectionLoadingSkeleton />}>
+                <UserManagement />
+              </Suspense>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-          return (
-            <Collapsible
-              key={section.id}
-              open={isOpen}
-              onOpenChange={() => toggleSection(section.id)}
-            >
-              <Card className={cn(
-                "transition-all duration-200",
-                isOpen && "ring-1 ring-primary/20"
-              )}>
-                <CollapsibleTrigger asChild>
-                  <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className={cn(
-                          "p-2 rounded-lg",
-                          isOpen ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
-                        )}>
-                          <Icon className="h-5 w-5" />
-                        </div>
-                        <div>
-                          <CardTitle className="text-base font-medium">{section.title}</CardTitle>
-                          <CardDescription className="text-sm">{section.description}</CardDescription>
-                        </div>
-                      </div>
-                      <ChevronDown className={cn(
-                        "h-5 w-5 text-muted-foreground transition-transform duration-200",
-                        isOpen && "rotate-180"
-                      )} />
-                    </div>
-                  </CardHeader>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <CardContent className="pt-0 pb-6">
-                    <div className="pt-4 border-t">
-                      <Suspense fallback={<SectionLoadingSkeleton />}>
-                        <SectionComponent />
-                      </Suspense>
-                    </div>
-                  </CardContent>
-                </CollapsibleContent>
-              </Card>
-            </Collapsible>
-          );
-        })
-      )}
+        <TabsContent value="access" className="mt-6 space-y-6">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                  <Lock className="h-5 w-5" />
+                </div>
+                <div>
+                  <CardTitle className="text-base font-medium">Page Access Control</CardTitle>
+                  <CardDescription className="text-sm">Configure which roles can access each page</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Suspense fallback={<SectionLoadingSkeleton />}>
+                <PageAccessSettings />
+              </Suspense>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="config" className="mt-6 space-y-6">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                  <GitBranch className="h-5 w-5" />
+                </div>
+                <div>
+                  <CardTitle className="text-base font-medium">Pipeline & Status Management</CardTitle>
+                  <CardDescription className="text-sm">Customize deal stages and lead statuses</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Suspense fallback={<SectionLoadingSkeleton />}>
+                <PipelineSettings />
+              </Suspense>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                  <Plug className="h-5 w-5" />
+                </div>
+                <div>
+                  <CardTitle className="text-base font-medium">Third-Party Integrations</CardTitle>
+                  <CardDescription className="text-sm">Connect with Microsoft Teams, Email, and Calendar</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Suspense fallback={<SectionLoadingSkeleton />}>
+                <IntegrationSettings />
+              </Suspense>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                  <CheckSquare className="h-5 w-5" />
+                </div>
+                <div>
+                  <CardTitle className="text-base font-medium">Approval Workflows</CardTitle>
+                  <CardDescription className="text-sm">Configure multi-step approval processes</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Suspense fallback={<SectionLoadingSkeleton />}>
+                <ApprovalWorkflowSettings />
+              </Suspense>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                  <Palette className="h-5 w-5" />
+                </div>
+                <div>
+                  <CardTitle className="text-base font-medium">Branding Settings</CardTitle>
+                  <CardDescription className="text-sm">Customize app logo, colors, and appearance</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Suspense fallback={<SectionLoadingSkeleton />}>
+                <BrandingSettings />
+              </Suspense>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="system" className="mt-6 space-y-6">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                  <Database className="h-5 w-5" />
+                </div>
+                <div>
+                  <CardTitle className="text-base font-medium">Data Backup & Restore</CardTitle>
+                  <CardDescription className="text-sm">Export data and manage backups</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Suspense fallback={<SectionLoadingSkeleton />}>
+                <BackupRestoreSettings />
+              </Suspense>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                  <Shield className="h-5 w-5" />
+                </div>
+                <div>
+                  <CardTitle className="text-base font-medium">Audit Logs</CardTitle>
+                  <CardDescription className="text-sm">View system activity and security events</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Suspense fallback={<SectionLoadingSkeleton />}>
+                <AuditLogsSettings />
+              </Suspense>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                  <Activity className="h-5 w-5" />
+                </div>
+                <div>
+                  <CardTitle className="text-base font-medium">System Status</CardTitle>
+                  <CardDescription className="text-sm">Monitor system health, database stats, and storage usage</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Suspense fallback={<SectionLoadingSkeleton />}>
+                <SystemStatusSettings />
+              </Suspense>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="reports" className="mt-6 space-y-6">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                  <FileText className="h-5 w-5" />
+                </div>
+                <div>
+                  <CardTitle className="text-base font-medium">Scheduled Reports</CardTitle>
+                  <CardDescription className="text-sm">Configure automated email reports</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Suspense fallback={<SectionLoadingSkeleton />}>
+                <ScheduledReportsSettings />
+              </Suspense>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                  <Megaphone className="h-5 w-5" />
+                </div>
+                <div>
+                  <CardTitle className="text-base font-medium">Announcement Management</CardTitle>
+                  <CardDescription className="text-sm">Create and manage system announcements</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Suspense fallback={<SectionLoadingSkeleton />}>
+                <AnnouncementSettings />
+              </Suspense>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };

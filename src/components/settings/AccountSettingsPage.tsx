@@ -3,12 +3,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/hooks/useAuth';
 import { useThemePreferences } from '@/hooks/useThemePreferences';
 import { useSecurityAudit } from '@/hooks/useSecurityAudit';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Loader2, Key, Check, X, Eye, EyeOff } from 'lucide-react';
+import { Loader2, Key, Check, X, Eye, EyeOff, User, Shield, Bell, Settings2 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -406,7 +407,14 @@ const AccountSettingsPage = () => {
   }
 
   return (
-    <div className="space-y-6 max-w-3xl pb-6">
+    <div className="space-y-6 max-w-6xl pb-6">
+      <div className="mb-6">
+        <h2 className="text-lg font-semibold">My Account</h2>
+        <p className="text-sm text-muted-foreground">
+          Manage your profile, security, and preferences
+        </p>
+      </div>
+
       {/* Unsaved Changes Indicator */}
       {hasUnsavedChanges() && (
         <div className="sticky top-0 z-10 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 flex items-center justify-between shadow-sm">
@@ -417,37 +425,62 @@ const AccountSettingsPage = () => {
         </div>
       )}
 
-      {/* Profile Section */}
-      <ProfileSection 
-        profile={profile} 
-        setProfile={setProfile} 
-        userId={user?.id} 
-      />
+      <Tabs defaultValue="profile" className="w-full">
+        <TabsList className="grid w-full grid-cols-4 max-w-lg">
+          <TabsTrigger value="profile" className="flex items-center gap-2">
+            <User className="h-4 w-4" />
+            <span className="sr-only sm:not-sr-only">Profile</span>
+          </TabsTrigger>
+          <TabsTrigger value="security" className="flex items-center gap-2">
+            <Shield className="h-4 w-4" />
+            <span className="sr-only sm:not-sr-only">Security</span>
+          </TabsTrigger>
+          <TabsTrigger value="notifications" className="flex items-center gap-2">
+            <Bell className="h-4 w-4" />
+            <span className="sr-only sm:not-sr-only">Notifications</span>
+          </TabsTrigger>
+          <TabsTrigger value="display" className="flex items-center gap-2">
+            <Settings2 className="h-4 w-4" />
+            <span className="sr-only sm:not-sr-only">Display</span>
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Security Section */}
-      <SecuritySection
-        sessions={sessions}
-        loadingSessions={loadingSessions}
-        currentSessionToken={currentSessionToken}
-        onShowPasswordModal={() => setShowPasswordModal(true)}
-        onRefreshSessions={fetchSessions}
-        onTerminateSession={(id) => setTerminatingSession(id)}
-        onTerminateAllOthers={() => setShowTerminateAllDialog(true)}
-      />
+        <TabsContent value="profile" className="mt-6">
+          <ProfileSection 
+            profile={profile} 
+            setProfile={setProfile} 
+            userId={user?.id} 
+          />
+        </TabsContent>
 
-      {/* Notifications Section */}
-      <NotificationsSection
-        notificationPrefs={notificationPrefs}
-        setNotificationPrefs={setNotificationPrefs}
-      />
+        <TabsContent value="security" className="mt-6">
+          <SecuritySection
+            sessions={sessions}
+            loadingSessions={loadingSessions}
+            currentSessionToken={currentSessionToken}
+            onShowPasswordModal={() => setShowPasswordModal(true)}
+            onRefreshSessions={fetchSessions}
+            onTerminateSession={(id) => setTerminatingSession(id)}
+            onTerminateAllOthers={() => setShowTerminateAllDialog(true)}
+          />
+        </TabsContent>
 
-      {/* Display Preferences Section */}
-      <DisplayPreferencesSection
-        displayPrefs={displayPrefs}
-        setDisplayPrefs={setDisplayPrefs}
-        theme={theme}
-        setTheme={setTheme}
-      />
+        <TabsContent value="notifications" className="mt-6">
+          <NotificationsSection
+            notificationPrefs={notificationPrefs}
+            setNotificationPrefs={setNotificationPrefs}
+          />
+        </TabsContent>
+
+        <TabsContent value="display" className="mt-6">
+          <DisplayPreferencesSection
+            displayPrefs={displayPrefs}
+            setDisplayPrefs={setDisplayPrefs}
+            theme={theme}
+            setTheme={setTheme}
+          />
+        </TabsContent>
+      </Tabs>
 
       {/* Save All Button */}
       <div className="flex justify-end pt-4 border-t">

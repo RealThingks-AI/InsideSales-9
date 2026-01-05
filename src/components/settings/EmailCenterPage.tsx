@@ -4,34 +4,28 @@ import { FileText, History, BarChart3 } from 'lucide-react';
 import EmailTemplatesSettings from '@/components/settings/EmailTemplatesSettings';
 import EmailHistorySettings from '@/components/settings/EmailHistorySettings';
 import { EmailAnalyticsDashboard } from '@/components/settings/EmailAnalyticsDashboard';
-
 interface EmailCenterPageProps {
   defaultTab?: string | null;
 }
-
 const validTabs = ['templates', 'history', 'analytics'];
-
-const EmailCenterPage = ({ defaultTab }: EmailCenterPageProps) => {
+const EmailCenterPage = ({
+  defaultTab
+}: EmailCenterPageProps) => {
   const [activeTab, setActiveTab] = useState(() => {
     if (defaultTab && validTabs.includes(defaultTab)) {
       return defaultTab;
     }
     return 'templates';
   });
-
   useEffect(() => {
     if (defaultTab && validTabs.includes(defaultTab)) {
       setActiveTab(defaultTab);
     }
   }, [defaultTab]);
-
-  return (
-    <div className="space-y-6 max-w-6xl">
+  return <div className="space-y-6 max-w-6xl">
       <div className="mb-6">
-        <h2 className="text-lg font-semibold">Email Center</h2>
-        <p className="text-sm text-muted-foreground">
-          Manage email templates, view sent emails, and analyze engagement
-        </p>
+        
+        
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -62,8 +56,6 @@ const EmailCenterPage = ({ defaultTab }: EmailCenterPageProps) => {
           <EmailAnalyticsDashboard />
         </TabsContent>
       </Tabs>
-    </div>
-  );
+    </div>;
 };
-
 export default EmailCenterPage;

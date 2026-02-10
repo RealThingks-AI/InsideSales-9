@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { X, Plus, Clock, History, ListTodo, ChevronDown, ChevronRight, Eye, Pencil, ArrowRight, RefreshCw, Check, ArrowUpDown, ArrowUp, ArrowDown, MessageSquarePlus, Phone, Mail, Calendar, FileText, User, MoreHorizontal, Trash2, CheckCircle, Handshake } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 // Checkbox import removed - using serial numbers instead
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
@@ -463,6 +464,108 @@ const parseChangeSummary = (action: string, details: Record<string, unknown> | n
       'Low': 'bg-blue-500',
     };
 
+    // Hidden internal fields
+    const HIDDEN_FIELDS = new Set(['id', 'created_by', 'modified_by', 'account_id']);
+
+    const toTitleCase = (key: string) => key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+    const isUUID = (val: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+
+    const formatDetailValue = (key: string, val: any): string => {
+      if (val === null || val === undefined) return '--';
+      if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}(T|\s)/)) {
+        try { return format(new Date(val), 'MMM d, yyyy h:mm a'); } catch { return val; }
+      }
+      if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        try { return format(new Date(val + 'T00:00:00'), 'MMM d, yyyy'); } catch { return val; }
+      }
+      if (typeof val === 'string' && isUUID(val)) return val.slice(0, 8) + '…';
+      if (typeof val === 'number' && (key.includes('revenue') || key.includes('contract_value') || key === 'budget')) return val.toLocaleString();
+      if (typeof val === 'number' && key === 'probability') return `${val}%`;
+      return String(val);
+    };
+
+    const renderFormattedDetails = (details: any) => {
+      if (!details || typeof details !== 'object') return null;
+
+      const { module, status, operation, timestamp, field_changes, old_data, updated_fields, ...rest } = details;
+
+      // Collect record data from old_data or updated_fields or remaining keys
+      const recordData = old_data || updated_fields || (Object.keys(rest).length > 0 ? rest : null);
+
+      return (
+        <div className="space-y-3">
+          {/* Summary badges */}
+          {(module || status || operation) && (
+            <div className="flex flex-wrap gap-2 items-center">
+              {module && <Badge variant="outline" className="text-xs">{module}</Badge>}
+              {operation && <Badge variant="secondary" className="text-xs">{operation}</Badge>}
+              {status && (
+                <Badge variant={status === 'Success' ? 'default' : 'destructive'} className="text-xs">
+                  {status}
+                </Badge>
+              )}
+              {timestamp && (
+                <span className="text-xs text-muted-foreground ml-auto">
+                  {(() => { try { return format(new Date(timestamp), 'MMM d, yyyy h:mm a'); } catch { return timestamp; } })()}
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Field changes table */}
+          {field_changes && typeof field_changes === 'object' && Object.keys(field_changes).length > 0 && (
+            <div>
+              <span className="text-xs font-medium text-muted-foreground block mb-1">Field Changes</span>
+              <div className="rounded-md border border-border/50 overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/30">
+                      <TableHead className="py-1.5 px-2 text-xs h-auto">Field</TableHead>
+                      <TableHead className="py-1.5 px-2 text-xs h-auto">Old Value</TableHead>
+                      <TableHead className="py-1.5 px-2 text-xs h-auto w-[20px]"></TableHead>
+                      <TableHead className="py-1.5 px-2 text-xs h-auto">New Value</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {Object.entries(field_changes)
+                      .filter(([key]) => !HIDDEN_FIELDS.has(key))
+                      .map(([key, change]: [string, any]) => (
+                        <TableRow key={key}>
+                          <TableCell className="py-1.5 px-2 text-xs text-muted-foreground">{toTitleCase(key)}</TableCell>
+                          <TableCell className="py-1.5 px-2 text-xs">{formatDetailValue(key, change?.old)}</TableCell>
+                          <TableCell className="py-1.5 px-1 w-[20px]">
+                            <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                          </TableCell>
+                          <TableCell className="py-1.5 px-2 text-xs font-medium">{formatDetailValue(key, change?.new)}</TableCell>
+                        </TableRow>
+                      ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          )}
+
+          {/* Record snapshot */}
+          {recordData && typeof recordData === 'object' && (
+            <div>
+              <span className="text-xs font-medium text-muted-foreground block mb-1">Record Snapshot</span>
+              <div className="rounded-md border border-border/50 bg-muted/10 p-2 space-y-1 max-h-48 overflow-auto">
+                {Object.entries(recordData)
+                  .filter(([key, val]) => !HIDDEN_FIELDS.has(key) && val !== null && val !== undefined)
+                  .map(([key, val]) => (
+                    <div key={key} className="flex items-start gap-2 text-xs">
+                      <span className="text-muted-foreground min-w-[120px] flex-shrink-0">{toTitleCase(key)}</span>
+                      <span className="text-foreground break-all">{formatDetailValue(key, val)}</span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    };
+
     const selectedLog = detailLogId ? auditLogs.find(l => l.id === detailLogId) : null;
 
   return (
@@ -472,7 +575,7 @@ const parseChangeSummary = (action: string, details: Record<string, unknown> | n
         onKeyDown={(e) => e.key === 'Escape' && onClose()}
       >
          {/* Header - Simple title only */}
-         <div className="flex items-center justify-between px-3 py-2 border-b border-border/30 bg-muted/30 flex-shrink-0">
+         <div className="flex items-center justify-between px-3 py-2 border-b border-border/30 bg-muted/30 flex-shrink-0 sticky top-0 z-20">
            <span className="text-sm font-medium text-muted-foreground">Details</span>
           <Button
             variant="ghost"
@@ -936,21 +1039,15 @@ const parseChangeSummary = (action: string, details: Record<string, unknown> | n
                     </div>
                   )}
 
-                  {/* Show raw details for create entries */}
+                  {/* Show formatted details for create entries */}
                   {changes.length === 0 && !isManualEntry && selectedLog.action === 'create' && details && (
-                    <div>
-                      <span className="text-muted-foreground text-xs block mb-1">Record Data</span>
-                      <pre className="text-xs bg-muted/30 rounded-md p-2 whitespace-pre-wrap break-all overflow-auto max-h-48">{JSON.stringify(details, null, 2)}</pre>
-                    </div>
+                    <div>{renderFormattedDetails(details)}</div>
                   )}
                   {changes.length === 0 && !isManualEntry && selectedLog.action === 'create' && !details && (
                     <p className="text-muted-foreground text-xs italic">Deal was created</p>
                   )}
                   {changes.length === 0 && !isManualEntry && selectedLog.action !== 'create' && details && !details.action_item_title && (
-                    <div>
-                      <span className="text-muted-foreground text-xs block mb-1">Details</span>
-                      <pre className="text-xs bg-muted/30 rounded-md p-2 whitespace-pre-wrap break-all overflow-auto max-h-48">{JSON.stringify(details, null, 2)}</pre>
-                    </div>
+                    <div>{renderFormattedDetails(details)}</div>
                   )}
                 </div>
                 </ScrollArea>

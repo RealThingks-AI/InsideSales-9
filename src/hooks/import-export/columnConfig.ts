@@ -8,6 +8,36 @@ interface ColumnConfig {
 // Define column mappings for different modules
 export const getColumnConfig = (table: string): ColumnConfig => {
   const configs: Record<string, ColumnConfig> = {
+    accounts: {
+      allowedColumns: [
+        'id',
+        'account_name',
+        'phone',
+        'website',
+        'industry',
+        'company_type',
+        'country',
+        'region',
+        'status',
+        'tags',
+        'description',
+        'account_owner',
+        'created_by',
+        'modified_by',
+        'created_time',
+        'modified_time',
+        'last_activity_time',
+        'currency'
+      ],
+      required: ['account_name'],
+      enums: {
+        industry: ['Automotive', 'Technology', 'Manufacturing', 'Healthcare', 'Finance', 'Retail', 'Other'],
+        company_type: ['OEM', 'Tier-1', 'Tier-2', 'Other'],
+        region: ['EU', 'US', 'ASIA', 'Other'],
+        status: ['New', 'Working', 'Qualified', 'Inactive'],
+        currency: ['EUR', 'USD', 'INR']
+      }
+    },
     contacts_module: {
       allowedColumns: [
         'id',
@@ -26,7 +56,8 @@ export const getColumnConfig = (table: string): ColumnConfig => {
         'created_by',
         'modified_by',
         'created_time',
-        'modified_time'
+        'modified_time',
+        'last_activity_time'
       ],
       required: ['contact_name'],
       enums: {
@@ -52,7 +83,8 @@ export const getColumnConfig = (table: string): ColumnConfig => {
         'created_by',
         'modified_by',
         'created_time',
-        'modified_time'
+        'modified_time',
+        'last_activity_time'
       ],
       required: ['contact_name'],
       enums: {

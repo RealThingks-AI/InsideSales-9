@@ -10,9 +10,9 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Deal } from "@/types/deal";
 import { LeadSearchableDropdown } from "@/components/LeadSearchableDropdown";
+import { AccountSearchableDropdown } from "@/components/AccountSearchableDropdown";
 import { supabase } from "@/integrations/supabase/client";
 import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { useUserDisplayNames } from "@/hooks/useUserDisplayNames";
 
 interface FormFieldRendererProps {
@@ -57,11 +57,9 @@ export const FormFieldRenderer = ({ field, value, onChange, onLeadSelect, error 
   const getFieldLabel = (field: string) => {
     const labels: Record<string, string> = {
       project_name: 'Project Name',
-      customer_name: 'Customer Name',
+      customer_name: 'Account',
       lead_name: 'Lead Name',
       lead_owner: 'Lead Owner',
-      account_id: 'Account',
-      contact_id: 'Contact',
       region: 'Region',
       priority: 'Priority',
       probability: 'Probability (%)',
@@ -230,7 +228,7 @@ export const FormFieldRenderer = ({ field, value, onChange, onLeadSelect, error 
             )}
           >
             <CalendarIcon className="mr-2 h-4 w-4" />
-            {date ? format(date, "dd/MM/yyyy") : <span>Pick a date</span>}
+            {date ? format(date, "PPP") : <span>Pick a date</span>}
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="start">
@@ -255,67 +253,8 @@ export const FormFieldRenderer = ({ field, value, onChange, onLeadSelect, error 
     );
   };
 
-  // Fetch accounts and contacts for dropdowns
-  const { data: accounts = [] } = useQuery({
-    queryKey: ['accounts-for-deals'],
-    queryFn: async () => {
-      const { data } = await supabase.from('accounts').select('id, company_name').order('company_name');
-      return data || [];
-    },
-    enabled: field === 'account_id',
-  });
-
-  const { data: contacts = [] } = useQuery({
-    queryKey: ['contacts-for-deals', value],
-    queryFn: async () => {
-      const { data } = await supabase.from('contacts').select('id, contact_name, account_id').order('contact_name');
-      return data || [];
-    },
-    enabled: field === 'contact_id',
-  });
-
   const renderField = () => {
     switch (field) {
-      case 'account_id':
-        return (
-          <Select
-            value={value || ''}
-            onValueChange={(val) => onChange(field, val || null)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select account..." />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="">No account</SelectItem>
-              {accounts.map((acc: any) => (
-                <SelectItem key={acc.id} value={acc.id}>
-                  {acc.company_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        );
-
-      case 'contact_id':
-        return (
-          <Select
-            value={value || ''}
-            onValueChange={(val) => onChange(field, val || null)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select contact..." />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="">No contact</SelectItem>
-              {contacts.map((contact: any) => (
-                <SelectItem key={contact.id} value={contact.id}>
-                  {contact.contact_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        );
-
       case 'lead_name':
         return (
           <LeadSearchableDropdown
@@ -323,6 +262,15 @@ export const FormFieldRenderer = ({ field, value, onChange, onLeadSelect, error 
             onValueChange={(val) => onChange(field, val)}
             onLeadSelect={handleLeadSelect}
             placeholder="Search and select a lead..."
+          />
+        );
+
+      case 'customer_name':
+        return (
+          <AccountSearchableDropdown
+            value={getStringValue(value)}
+            onValueChange={(val) => onChange(field, val)}
+            placeholder="Search and select an account..."
           />
         );
 

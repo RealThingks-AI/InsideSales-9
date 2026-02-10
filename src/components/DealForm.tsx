@@ -2,14 +2,15 @@
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Deal, DealStage, getNextStage, getFinalStageOptions, getStageIndex, DEAL_STAGES } from "@/types/deal";
 import { useToast } from "@/hooks/use-toast";
 import { validateRequiredFields, getFieldErrors, validateDateLogic, validateRevenueSum } from "./deal-form/validation";
 import { DealStageForm } from "./deal-form/DealStageForm";
-import { TaskModal } from "./tasks/TaskModal";
-import { useTasks } from "@/hooks/useTasks";
+import { DealActionItemsModal } from "./DealActionItemsModal";
 import { supabase } from "@/integrations/supabase/client";
 import { useUserDisplayNames } from "@/hooks/useUserDisplayNames";
 
@@ -21,17 +22,18 @@ interface DealFormProps {
   onRefresh?: () => Promise<void>;
   isCreating?: boolean;
   initialStage?: DealStage;
+   onDelete?: (dealId: string) => void;
 }
 
-export const DealForm = ({ deal, isOpen, onClose, onSave, isCreating = false, initialStage, onRefresh }: DealFormProps) => {
+ export const DealForm = ({ deal, isOpen, onClose, onSave, isCreating = false, initialStage, onRefresh, onDelete }: DealFormProps) => {
+   const [deleteLoading, setDeleteLoading] = useState(false);
   const [formData, setFormData] = useState<Partial<Deal>>({});
   const [loading, setLoading] = useState(false);
   const [showPreviousStages, setShowPreviousStages] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [showValidationErrors, setShowValidationErrors] = useState(false);
-  const [taskModalOpen, setTaskModalOpen] = useState(false);
+  const [actionModalOpen, setActionModalOpen] = useState(false);
   const { toast } = useToast();
-  const { createTask } = useTasks();
 
   // NEW: Track current user id for default Lead Owner
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -301,9 +303,28 @@ export const DealForm = ({ deal, isOpen, onClose, onSave, isCreating = false, in
   const handleActionButtonClick = (e: React.MouseEvent) => {
     e.preventDefault(); // Prevent form submission
     e.stopPropagation(); // Stop event bubbling
-    setTaskModalOpen(true);
+    setActionModalOpen(true);
   };
 
+   const handleDelete = async () => {
+     if (!deal?.id || !onDelete) return;
+     
+     setDeleteLoading(true);
+     try {
+       onDelete(deal.id);
+       onClose();
+     } catch (error) {
+       console.error("Error deleting deal:", error);
+       toast({
+         title: "Error",
+         description: "Failed to delete deal",
+         variant: "destructive",
+       });
+     } finally {
+       setDeleteLoading(false);
+     }
+   };
+ 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
@@ -335,36 +356,6 @@ export const DealForm = ({ deal, isOpen, onClose, onSave, isCreating = false, in
           </div>
         </DialogHeader>
 
-        {/* Deal Summary Section - Only show for existing deals */}
-        {!isCreating && formData && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted/50 rounded-lg mb-4">
-            <div>
-              <p className="text-xs text-muted-foreground">Customer</p>
-              <p className="font-medium truncate">{formData.customer_name || '-'}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Contract Value</p>
-              <p className="font-medium text-primary">
-                {formData.total_contract_value 
-                  ? `€${formData.total_contract_value.toLocaleString()}`
-                  : '-'}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Probability</p>
-              <p className="font-medium">{formData.probability ? `${formData.probability}%` : '-'}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Expected Close</p>
-              <p className="font-medium">
-                {formData.expected_closing_date 
-                  ? new Date(formData.expected_closing_date).toLocaleDateString()
-                  : '-'}
-              </p>
-            </div>
-          </div>
-        )}
-
         <form onSubmit={handleSubmit} className="space-y-6">
           <DealStageForm
             formData={formData}
@@ -384,6 +375,35 @@ export const DealForm = ({ deal, isOpen, onClose, onSave, isCreating = false, in
               <Button type="submit" disabled={loading} className="btn-primary">
                 {loading ? "Saving..." : "Save"}
               </Button>
+               {/* Delete button - only for existing deals */}
+               {!isCreating && deal && onDelete && (
+                 <AlertDialog>
+                   <AlertDialogTrigger asChild>
+                     <Button 
+                       type="button" 
+                       variant="destructive" 
+                       disabled={deleteLoading}
+                     >
+                       <Trash2 className="w-4 h-4 mr-2" />
+                       {deleteLoading ? "Deleting..." : "Delete"}
+                     </Button>
+                   </AlertDialogTrigger>
+                   <AlertDialogContent>
+                     <AlertDialogHeader>
+                       <AlertDialogTitle>Delete Deal</AlertDialogTitle>
+                       <AlertDialogDescription>
+                         Are you sure you want to delete "{deal.project_name || deal.deal_name}"? This action cannot be undone.
+                       </AlertDialogDescription>
+                     </AlertDialogHeader>
+                     <AlertDialogFooter>
+                       <AlertDialogCancel>Cancel</AlertDialogCancel>
+                       <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                         Delete
+                       </AlertDialogAction>
+                     </AlertDialogFooter>
+                   </AlertDialogContent>
+                 </AlertDialog>
+               )}
             </div>
 
             <div className="flex gap-2">
@@ -425,12 +445,11 @@ export const DealForm = ({ deal, isOpen, onClose, onSave, isCreating = false, in
         </form>
       </DialogContent>
       
-      {/* Task Modal */}
-      <TaskModal
-        open={taskModalOpen}
-        onOpenChange={setTaskModalOpen}
-        onSubmit={createTask}
-        context={deal ? { module: 'deals', recordId: deal.id, locked: true } : undefined}
+      {/* Action Items Modal */}
+      <DealActionItemsModal
+        open={actionModalOpen}
+        onOpenChange={setActionModalOpen}
+        deal={deal}
       />
     </Dialog>
   );

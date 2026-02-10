@@ -1,24 +1,22 @@
-// RT-CRM Application
+
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import SecurityEnhancedApp from "@/components/SecurityEnhancedApp";
 import { AppSidebar } from "@/components/AppSidebar";
-import PageAccessGuard from "@/components/PageAccessGuard";
 import Dashboard from "./pages/Dashboard";
 import Accounts from "./pages/Accounts";
 import Contacts from "./pages/Contacts";
 import Leads from "./pages/Leads";
-import Meetings from "./pages/Meetings";
 import DealsPage from "./pages/DealsPage";
+import ActionItems from "./pages/ActionItems";
 import Settings from "./pages/Settings";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import Notifications from "./pages/Notifications";
-import Tasks from "./pages/Tasks";
 import { useState } from "react";
 
 const queryClient = new QueryClient();
@@ -26,21 +24,26 @@ const queryClient = new QueryClient();
 // Layout Component for all pages with fixed sidebar
 const FixedSidebarLayout = ({ children }: { children: React.ReactNode }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false); // Start collapsed
+  const location = useLocation();
+  
+  // These routes need overflow-hidden so they can control their own scrolling
+  const controlledScrollRoutes = ['/action-items', '/leads', '/contacts', '/deals', '/settings', '/notifications', '/', '/accounts'];
+  const needsControlledScroll = controlledScrollRoutes.includes(location.pathname);
   
   return (
-    <div className="min-h-screen flex w-full">
+    <div className="h-screen flex w-full overflow-hidden">
       <div className="fixed top-0 left-0 z-50 h-full">
         <AppSidebar isFixed={true} isOpen={sidebarOpen} onToggle={setSidebarOpen} />
       </div>
       <main 
-        className="flex-1 bg-background min-h-screen"
+        className="flex-1 bg-background h-screen overflow-hidden"
         style={{ 
           marginLeft: sidebarOpen ? '200px' : '64px',
           transition: 'margin-left 300ms ease-in-out',
           width: `calc(100vw - ${sidebarOpen ? '200px' : '64px'})`
         }}
       >
-        <div className="w-full h-full overflow-auto">
+        <div className={`w-full h-full min-h-0 ${needsControlledScroll ? 'overflow-hidden' : 'overflow-auto'}`}>
           {children}
         </div>
       </main>
@@ -48,7 +51,7 @@ const FixedSidebarLayout = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-// Protected Route Component with Page Access Control
+// Protected Route Component
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
 
@@ -67,12 +70,10 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     return <Navigate to="/auth" replace />;
   }
 
-  // Use FixedSidebarLayout for all protected routes with Page Access Guard
+  // Use FixedSidebarLayout for all protected routes
   return (
     <FixedSidebarLayout>
-      <PageAccessGuard>
-        {children}
-      </PageAccessGuard>
+      {children}
     </FixedSidebarLayout>
   );
 };
@@ -100,22 +101,15 @@ const AuthRoute = ({ children }: { children: React.ReactNode }) => {
 };
 
 // App Router Component - inside the auth context
-// Lazy load test page
-import StickyHeaderTest from "./pages/StickyHeaderTest";
-
-// App Router Component - inside the auth context
 const AppRouter = () => (
   <BrowserRouter>
     <Routes>
-      {/* Public test route for sticky header verification */}
-      <Route path="/sticky-header-test" element={<StickyHeaderTest />} />
       <Route path="/auth" element={
         <AuthRoute>
           <Auth />
         </AuthRoute>
       } />
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
-      <Route path="/dashboard" element={
+      <Route path="/" element={
         <ProtectedRoute>
           <Dashboard />
         </ProtectedRoute>
@@ -135,24 +129,19 @@ const AppRouter = () => (
           <Leads />
         </ProtectedRoute>
       } />
-      <Route path="/meetings" element={
-        <ProtectedRoute>
-          <Meetings />
-        </ProtectedRoute>
-      } />
       <Route path="/deals" element={
         <ProtectedRoute>
           <DealsPage />
         </ProtectedRoute>
       } />
+      <Route path="/action-items" element={
+        <ProtectedRoute>
+          <ActionItems />
+        </ProtectedRoute>
+      } />
       <Route path="/notifications" element={
         <ProtectedRoute>
           <Notifications />
-        </ProtectedRoute>
-      } />
-      <Route path="/tasks" element={
-        <ProtectedRoute>
-          <Tasks />
         </ProtectedRoute>
       } />
       <Route path="/settings" element={

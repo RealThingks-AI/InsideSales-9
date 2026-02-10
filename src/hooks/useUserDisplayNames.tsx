@@ -1,11 +1,11 @@
-
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
 // Create a global cache to prevent duplicate fetches
 const displayNameCache = new Map<string, string>();
 const pendingFetches = new Map<string, Promise<any>>();
 
+// Original hook that fetches display names for specific user IDs
 export const useUserDisplayNames = (userIds: string[]) => {
   const [displayNames, setDisplayNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
@@ -145,4 +145,113 @@ export const useUserDisplayNames = (userIds: string[]) => {
   }, [userIds.join(',')]); // Use join to create a stable dependency
 
   return { displayNames, loading };
+};
+
+// Helper hook that fetches all users from auth.users via user-admin edge function
+// This matches the User Management section for consistent display names
+export const useAllUsers = () => {
+  const [users, setUsers] = useState<{ id: string; display_name: string; email: string; status: 'active' | 'deactivated' }[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        console.log('useAllUsers: Fetching users from user-admin edge function...');
+        
+        // Call the user-admin edge function which fetches from auth.users
+        const { data: functionResult, error: functionError } = await supabase.functions.invoke(
+          'user-admin',
+          { method: 'GET' }
+        );
+
+        console.log('useAllUsers: Edge function result:', { functionResult, functionError });
+
+        if (functionError) {
+          console.error('useAllUsers: Edge function error:', functionError);
+          throw functionError;
+        }
+
+        if (functionResult?.users) {
+          const userList = functionResult.users.map((authUser: any) => {
+            // Use the same display name logic as User Management
+            const metadata = authUser.user_metadata || {};
+            let displayName = "Unknown User";
+            
+            // Priority: user_metadata.full_name > email username
+            if (metadata.full_name?.trim() && !metadata.full_name.includes('@')) {
+              displayName = metadata.full_name.trim();
+            } else if (authUser.email) {
+              displayName = authUser.email.split('@')[0];
+            }
+
+            // Determine if user is active or deactivated
+            const isDeactivated = authUser.banned_until && 
+              new Date(authUser.banned_until) > new Date();
+
+            return {
+              id: authUser.id,
+              display_name: displayName,
+              email: authUser.email || '',
+              status: isDeactivated ? 'deactivated' as const : 'active' as const,
+            };
+          });
+
+          // Sort by display name and filter to active users only for assignment dropdowns
+          const sortedUsers = userList
+            .filter((u: any) => u.status === 'active')
+            .sort((a: any, b: any) => a.display_name.localeCompare(b.display_name));
+
+          console.log('useAllUsers: Processed users:', sortedUsers);
+          setUsers(sortedUsers);
+        }
+      } catch (error) {
+        console.error('useAllUsers: Error fetching users:', error);
+        
+        // Fallback to profiles table if edge function fails
+        console.log('useAllUsers: Falling back to profiles table...');
+        try {
+          const { data, error: profilesError } = await supabase
+            .from('profiles')
+            .select('id, full_name, "Email ID"')
+            .order('full_name', { ascending: true });
+
+          if (!profilesError && data) {
+            const userList = data.map((profile) => {
+              let displayName = "Unknown User";
+              
+              if (profile.full_name?.trim() && 
+                  !profile.full_name.includes('@') &&
+                  profile.full_name !== profile["Email ID"]) {
+                displayName = profile.full_name.trim();
+              } else if (profile["Email ID"]) {
+                displayName = profile["Email ID"].split('@')[0];
+              }
+
+              return {
+                id: profile.id,
+                display_name: displayName,
+                email: profile["Email ID"] || '',
+                status: 'active' as const,
+              };
+            });
+
+            setUsers(userList);
+          }
+        } catch (fallbackError) {
+          console.error('useAllUsers: Fallback also failed:', fallbackError);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUsers();
+  }, []);
+
+  const getUserDisplayName = (userId: string) => {
+    const user = users.find((u) => u.id === userId);
+    return user?.display_name || 'Unknown User';
+  };
+
+  return { users, loading, getUserDisplayName };
 };

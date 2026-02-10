@@ -5,19 +5,15 @@ import {
   BarChart3, 
   Settings,
   LogOut,
-  ChevronLeft,
-  ChevronRight,
+  Pin,
+  PinOff,
   Bell,
-  Sun,
-  Moon,
-  Building2,
-  CheckSquare
+  CheckSquare,
+  Building2
 } from "lucide-react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { useThemePreferences } from "@/hooks/useThemePreferences";
-import { useState, useEffect, useMemo } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useState } from "react";
 import {
   Tooltip,
   TooltipContent,
@@ -34,17 +30,13 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-import { Video } from "lucide-react";
-
-const allMenuItems = [
-  { title: "Dashboard", url: "/dashboard", route: "/dashboard", icon: Home },
-  { title: "Accounts", url: "/accounts", route: "/accounts", icon: Building2 },
-  { title: "Contacts", url: "/contacts", route: "/contacts", icon: Users },
-  { title: "Leads", url: "/leads", route: "/leads", icon: UserPlus },
-  { title: "Meetings", url: "/meetings", route: "/meetings", icon: Video },
-  { title: "Deals", url: "/deals", route: "/deals", icon: BarChart3 },
-  { title: "Tasks", url: "/tasks", route: "/tasks", icon: CheckSquare },
-  { title: "Settings", url: "/settings", route: "/settings", icon: Settings },
+const menuItems = [
+  { title: "Dashboard", url: "/", icon: Home },
+  { title: "Accounts", url: "/accounts", icon: Building2 },
+  { title: "Contacts", url: "/contacts", icon: Users },
+  { title: "Leads", url: "/leads", icon: UserPlus },
+  { title: "Deals", url: "/deals", icon: BarChart3 },
+  { title: "Action Items", url: "/action-items", icon: CheckSquare },
 ];
 
 interface AppSidebarProps {
@@ -53,110 +45,35 @@ interface AppSidebarProps {
   onToggle?: (open: boolean) => void;
 }
 
-interface PagePermission {
-  route: string;
-  admin_access: boolean;
-  manager_access: boolean;
-  user_access: boolean;
-}
-
 export function AppSidebar({ isFixed = false, isOpen, onToggle }: AppSidebarProps) {
   const [isPinned, setIsPinned] = useState(false);
   const [showSignOutDialog, setShowSignOutDialog] = useState(false);
-  const [permissions, setPermissions] = useState<PagePermission[]>([]);
-  const [userRole, setUserRole] = useState<string>('user');
   const location = useLocation();
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
-  const { theme, setTheme } = useThemePreferences();
   const currentPath = location.pathname;
-
-  // Fetch user role and permissions
-  useEffect(() => {
-    const fetchRoleAndPermissions = async () => {
-      if (!user) return;
-
-      try {
-        // Get user role from user_roles table
-        const { data: roleData } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', user.id)
-          .single();
-
-        const role = roleData?.role || user.user_metadata?.role || 'user';
-        setUserRole(role);
-
-        // Get all page permissions
-        const { data: permData } = await supabase
-          .from('page_permissions')
-          .select('route, admin_access, manager_access, user_access');
-
-        setPermissions(permData || []);
-      } catch (error) {
-        console.error('Error fetching role/permissions:', error);
-      }
-    };
-
-    fetchRoleAndPermissions();
-  }, [user]);
-
-  // Filter menu items based on user permissions
-  const menuItems = useMemo(() => {
-    return allMenuItems.filter(item => {
-      const permission = permissions.find(p => p.route === item.route);
-      if (!permission) return true; // Allow if no permission record exists
-
-      switch (userRole) {
-        case 'admin':
-          return permission.admin_access;
-        case 'manager':
-          return permission.manager_access;
-        case 'user':
-        default:
-          return permission.user_access;
-      }
-    });
-  }, [permissions, userRole]);
 
   // Use external state if provided (for fixed mode), otherwise use internal state
   const sidebarOpen = isFixed ? (isOpen ?? false) : isPinned;
 
   const isActive = (path: string) => {
-    if (path === "/dashboard") {
-      return currentPath === "/" || currentPath === "/dashboard";
+    if (path === "/") {
+      return currentPath === "/";
     }
     return currentPath.startsWith(path);
   };
 
-  const handleSignOutClick = () => {
-    setShowSignOutDialog(true);
-  };
-
-  const handleSignOutConfirm = async () => {
-    setShowSignOutDialog(false);
+  const handleSignOut = async () => {
+    console.log('Sign out clicked');
     await signOut();
   };
 
   const handleLogoClick = () => {
-    navigate('/dashboard');
+    navigate('/');
   };
 
   const handleNotificationClick = () => {
     navigate('/notifications');
-  };
-
-  const handleThemeToggle = () => {
-    const newTheme = theme === 'light' ? 'dark' : 'light';
-    setTheme(newTheme);
-  };
-
-  const getThemeIcon = () => {
-    return theme === 'light' ? Sun : Moon;
-  };
-
-  const getThemeTooltipText = () => {
-    return theme === 'light' ? 'Switch to Dark theme' : 'Switch to Light theme';
   };
 
   const getUserDisplayName = () => {
@@ -217,7 +134,7 @@ export function AppSidebar({ isFixed = false, isOpen, onToggle }: AppSidebarProp
                 className={`
                   flex items-center h-10 rounded-lg relative transition-colors duration-200 font-medium
                   ${active 
-                    ? 'text-sidebar-primary bg-sidebar-accent' 
+                    ? 'text-sidebar-accent-foreground bg-sidebar-accent' 
                     : 'text-sidebar-foreground hover:text-sidebar-primary hover:bg-sidebar-accent/50'
                   }
                 `}
@@ -272,7 +189,7 @@ export function AppSidebar({ isFixed = false, isOpen, onToggle }: AppSidebarProp
                 onClick={handleNotificationClick}
                 className={`flex items-center h-10 w-full rounded-lg transition-colors font-medium ${
                   currentPath === '/notifications' 
-                    ? 'text-sidebar-primary bg-sidebar-accent' 
+                    ? 'text-sidebar-accent-foreground bg-sidebar-accent' 
                     : 'text-sidebar-foreground/70 hover:text-sidebar-primary hover:bg-sidebar-accent/50'
                 }`}
               >
@@ -298,19 +215,20 @@ export function AppSidebar({ isFixed = false, isOpen, onToggle }: AppSidebarProp
           </Tooltip>
         </div>
 
-        {/* Theme Toggle */}
+        {/* Settings */}
         <div>
           <Tooltip>
             <TooltipTrigger asChild>
               <button
-                onClick={handleThemeToggle}
-                className="flex items-center h-10 w-full rounded-lg transition-colors text-sidebar-foreground/70 hover:text-sidebar-primary hover:bg-sidebar-accent/50 font-medium"
+                onClick={() => navigate('/settings')}
+                className={`flex items-center h-10 w-full rounded-lg transition-colors font-medium ${
+                  currentPath === '/settings' || currentPath.startsWith('/settings')
+                    ? 'text-sidebar-accent-foreground bg-sidebar-accent' 
+                    : 'text-sidebar-foreground/70 hover:text-sidebar-primary hover:bg-sidebar-accent/50'
+                }`}
               >
                 <div className="w-10 h-10 flex items-center justify-center flex-shrink-0">
-                  {(() => {
-                    const ThemeIcon = getThemeIcon();
-                    return <ThemeIcon className="w-5 h-5" />;
-                  })()}
+                  <Settings className="w-5 h-5" />
                 </div>
                 <div 
                   className={`transition-all duration-300 overflow-hidden whitespace-nowrap ${
@@ -321,12 +239,12 @@ export function AppSidebar({ isFixed = false, isOpen, onToggle }: AppSidebarProp
                     fontSize: '14px'
                   }}
                 >
-                  Theme
+                  Settings
                 </div>
               </button>
             </TooltipTrigger>
             <TooltipContent side={sidebarOpen ? "bottom" : "right"}>
-              <p>{getThemeTooltipText()}</p>
+              <p>Settings</p>
             </TooltipContent>
           </Tooltip>
         </div>
@@ -340,7 +258,7 @@ export function AppSidebar({ isFixed = false, isOpen, onToggle }: AppSidebarProp
                 className="flex items-center h-10 w-full rounded-lg transition-colors text-sidebar-foreground/70 hover:text-sidebar-primary hover:bg-sidebar-accent/50 font-medium"
               >
                 <div className="w-10 h-10 flex items-center justify-center flex-shrink-0">
-                  {sidebarOpen ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
+                  {sidebarOpen ? <Pin className="w-5 h-5" /> : <PinOff className="w-5 h-5" />}
                 </div>
                 <div 
                   className={`transition-all duration-300 overflow-hidden whitespace-nowrap ${
@@ -366,7 +284,7 @@ export function AppSidebar({ isFixed = false, isOpen, onToggle }: AppSidebarProp
           <Tooltip>
             <TooltipTrigger asChild>
               <button
-                onClick={handleSignOutClick}
+                onClick={() => setShowSignOutDialog(true)}
                 className="flex items-center h-10 w-full rounded-lg transition-colors text-sidebar-foreground/70 hover:text-sidebar-primary hover:bg-sidebar-accent/50 font-medium"
               >
                 <div className="w-10 h-10 flex items-center justify-center flex-shrink-0">
@@ -398,12 +316,14 @@ export function AppSidebar({ isFixed = false, isOpen, onToggle }: AppSidebarProp
           <AlertDialogHeader>
             <AlertDialogTitle>Sign Out</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to sign out? You will need to log in again to access your account.
+              Are you sure you want to sign out of your account?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleSignOutConfirm}>Sign Out</AlertDialogAction>
+            <AlertDialogAction onClick={handleSignOut}>
+              Sign Out
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -2,7 +2,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { CSVParser } from '@/utils/csvParser';
 import { DateFormatUtils } from '@/utils/dateFormatUtils';
-import { UserNameUtils } from '@/utils/userNameUtils';
 
 export interface DealsProcessingOptions {
   userId: string;
@@ -17,8 +16,6 @@ export interface DealsProcessingResult {
 }
 
 export class DealsCSVProcessor {
-  private userIdMap: Record<string, string> = {};
-
   async processCSV(csvText: string, options: DealsProcessingOptions): Promise<DealsProcessingResult> {
     console.log('DealsCSVProcessor: Starting processing with standardized YYYY-MM-DD date format');
     
@@ -29,11 +26,6 @@ export class DealsCSVProcessor {
       if (rows.length === 0) {
         throw new Error('No data rows found in CSV');
       }
-
-      // Collect user names from CSV for user fields
-      const userNames = UserNameUtils.extractUserNames(rows, headers, ['created_by', 'modified_by', 'lead_owner']);
-      this.userIdMap = await UserNameUtils.fetchUserIdsByNames(userNames);
-      console.log('DealsCSVProcessor: Fetched user IDs for', Object.keys(this.userIdMap).length, 'users');
 
       const result: DealsProcessingResult = {
         successCount: 0,
@@ -251,13 +243,14 @@ export class DealsCSVProcessor {
       modified_by: userId
     };
 
-    // Map CSV fields to database fields (excluding user fields)
+    // Map CSV fields to database fields
     const fieldMapping: Record<string, string> = {
       'deal_name': 'deal_name',
       'stage': 'stage',
       'project_name': 'project_name',
       'customer_name': 'customer_name',
       'lead_name': 'lead_name',
+      'lead_owner': 'lead_owner',
       'region': 'region',
       'priority': 'priority',
       'probability': 'probability',
@@ -300,17 +293,6 @@ export class DealsCSVProcessor {
         dealRecord[dbField] = rowObj[csvField];
       }
     });
-
-    // Handle user fields - convert display names to UUIDs
-    if (rowObj.created_by !== undefined && rowObj.created_by !== '') {
-      dealRecord.created_by = UserNameUtils.resolveUserId(rowObj.created_by, this.userIdMap, userId);
-    }
-    if (rowObj.modified_by !== undefined && rowObj.modified_by !== '') {
-      dealRecord.modified_by = UserNameUtils.resolveUserId(rowObj.modified_by, this.userIdMap, userId);
-    }
-    if (rowObj.lead_owner !== undefined && rowObj.lead_owner !== '') {
-      dealRecord.lead_owner = UserNameUtils.resolveUserId(rowObj.lead_owner, this.userIdMap, userId);
-    }
 
     // Ensure deal_name is always set - try multiple fallbacks
     if (!dealRecord.deal_name || dealRecord.deal_name.trim() === '') {

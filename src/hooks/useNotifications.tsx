@@ -12,6 +12,8 @@ interface Notification {
   status: 'read' | 'unread';
   notification_type: string;
   action_item_id: string | null;
+  module_type: string | null;
+  module_id: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -2,53 +2,42 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 
-// Simple in-memory cache for role
-let roleCache: { userId: string; role: string; timestamp: number } | null = null;
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-
 export const useUserRole = () => {
   const [userRole, setUserRole] = useState<string>('user');
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
 
-  const fetchUserRole = useCallback(async (forceRefresh = false) => {
+  const fetchUserRole = useCallback(async () => {
     if (!user) {
       setUserRole('user');
       setLoading(false);
       return;
     }
 
-    // Check cache first (unless force refresh)
-    if (
-      !forceRefresh &&
-      roleCache &&
-      roleCache.userId === user.id &&
-      Date.now() - roleCache.timestamp < CACHE_TTL
-    ) {
-      setUserRole(roleCache.role);
-      setLoading(false);
-      return;
-    }
-
     try {
-      // Fetch role from user_roles table via secure RPC function
-      const { data, error } = await supabase.rpc('get_user_role', {
-        p_user_id: user.id
-      });
-
+      console.log('Fetching role for user:', user.email);
+      
+      // First check user_roles table (proper role storage)
+      const { data: roleData, error } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      
       if (error) {
-        console.error('Error fetching user role:', error);
-        setUserRole('user');
-      } else {
-        const role = data || 'user';
+        console.error('Error fetching role from user_roles:', error);
+        // Fallback to user metadata
+        const role = user.user_metadata?.role || 'user';
+        console.log('User role from metadata (fallback):', role);
         setUserRole(role);
-        
-        // Update cache
-        roleCache = {
-          userId: user.id,
-          role,
-          timestamp: Date.now()
-        };
+      } else if (roleData) {
+        console.log('User role from user_roles table:', roleData.role);
+        setUserRole(roleData.role);
+      } else {
+        // No role in table, check metadata
+        const role = user.user_metadata?.role || 'user';
+        console.log('User role from metadata:', role);
+        setUserRole(role);
       }
     } catch (error) {
       console.error('Error in fetchUserRole:', error);
@@ -62,15 +51,9 @@ export const useUserRole = () => {
     fetchUserRole();
   }, [fetchUserRole]);
 
-  // Clear cache when user changes
-  useEffect(() => {
-    if (!user && roleCache) {
-      roleCache = null;
-    }
-  }, [user]);
-
-  const refreshRole = useCallback(() => {
-    return fetchUserRole(true);
+  const refreshRole = useCallback(async () => {
+    setLoading(true);
+    await fetchUserRole();
   }, [fetchUserRole]);
 
   const isAdmin = userRole === 'admin';

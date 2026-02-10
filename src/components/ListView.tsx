@@ -1,40 +1,28 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Deal, DealStage, DEAL_STAGES, STAGE_COLORS } from "@/types/deal";
-import { Search, Filter, X, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Briefcase } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RowActionsDropdown, Edit, Trash2, CheckSquare } from "./RowActionsDropdown";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Deal, DealStage, DEAL_STAGES, STAGE_COLORS } from "@/types/deal";
+import { Search, X, Pencil, Trash2, ArrowUp, ArrowDown, ArrowUpDown, ChevronLeft, ChevronRight, MoreHorizontal, ListTodo } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { format } from "date-fns";
-import { DealColumnCustomizer, DealColumnConfig, defaultDealColumns } from "./DealColumnCustomizer";
+import { InlineEditCell } from "./InlineEditCell";
+import { DealColumnCustomizer, DealColumnConfig } from "./DealColumnCustomizer";
 import { BulkActionsBar } from "./BulkActionsBar";
 import { DealsAdvancedFilter, AdvancedFilterState } from "./DealsAdvancedFilter";
-import { TaskModal } from "./tasks/TaskModal";
-import { useTasks } from "@/hooks/useTasks";
-
+import { DealActionItemsModal } from "./DealActionItemsModal";
+import { DealActionsDropdown } from "./DealActionsDropdown";
 import { useToast } from "@/hooks/use-toast";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { useColumnPreferences } from "@/hooks/useColumnPreferences";
-import { DeleteConfirmDialog } from "./shared/DeleteConfirmDialog";
-import { ClearFiltersButton } from "./shared/ClearFiltersButton";
-import { HighlightedText } from "./shared/HighlightedText";
-import { useUserDisplayNames } from "@/hooks/useUserDisplayNames";
-
-const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
-
+import { useDealsColumnPreferences } from "@/hooks/useDealsColumnPreferences";
 interface ListViewProps {
   deals: Deal[];
   onDealClick: (deal: Deal) => void;
   onUpdateDeal: (dealId: string, updates: Partial<Deal>) => void;
   onDeleteDeals: (dealIds: string[]) => void;
   onImportDeals: (deals: Partial<Deal>[]) => void;
-  initialStageFilter?: string;
-  onSelectionChange?: (selectedIds: string[]) => void;
 }
 
 export const ListView = ({ 
@@ -42,14 +30,11 @@ export const ListView = ({
   onDealClick, 
   onUpdateDeal, 
   onDeleteDeals, 
-  onImportDeals,
-  initialStageFilter = 'all',
-  onSelectionChange
+  onImportDeals 
 }: ListViewProps) => {
   const [searchTerm, setSearchTerm] = useState("");
-  const [leadOwnerFilter, setLeadOwnerFilter] = useState("all");
-  const [filters, setFilters] = useState<AdvancedFilterState>(() => ({
-    stages: initialStageFilter !== 'all' ? [initialStageFilter as DealStage] : [],
+  const [filters, setFilters] = useState<AdvancedFilterState>({
+    stages: [],
     regions: [],
     leadOwners: [],
     priorities: [],
@@ -57,97 +42,38 @@ export const ListView = ({
     handoffStatuses: [],
     searchTerm: "",
     probabilityRange: [0, 100],
-  }));
+  });
   const [sortBy, setSortBy] = useState<string>("modified_at");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [selectedDeals, setSelectedDeals] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(25);
-
-  // Get owner IDs for display names
-  const ownerIds = useMemo(() => {
-    return [...new Set(deals.map(d => d.lead_owner).filter(Boolean))] as string[];
-  }, [deals]);
-  const { displayNames } = useUserDisplayNames(ownerIds);
-
-  // Sync stage filter when initialStageFilter prop changes (from URL)
-  useEffect(() => {
-    if (initialStageFilter !== 'all') {
-      setFilters(prev => ({ ...prev, stages: [initialStageFilter as DealStage] }));
-    }
-  }, [initialStageFilter]);
-
-  // Notify parent of selection changes
-  useEffect(() => {
-    onSelectionChange?.(Array.from(selectedDeals));
-  }, [selectedDeals, onSelectionChange]);
   
-  // Task Modal state
-  const [taskModalOpen, setTaskModalOpen] = useState(false);
-  const [taskDealId, setTaskDealId] = useState<string | null>(null);
-  const { createTask } = useTasks();
-
-  // Delete confirmation state
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [dealToDelete, setDealToDelete] = useState<Deal | null>(null);
+  // Action Items Modal state
+  const [actionModalOpen, setActionModalOpen] = useState(false);
+  const [selectedDealForActions, setSelectedDealForActions] = useState<Deal | null>(null);
 
   // Column customizer state
   const [columnCustomizerOpen, setColumnCustomizerOpen] = useState(false);
+  
+  // Delete confirmation state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [dealToDelete, setDealToDelete] = useState<string | null>(null);
 
-  // Fetch all profiles for lead owner dropdown
-  const { data: allProfiles = [] } = useQuery({
-    queryKey: ['all-profiles'],
-    queryFn: async () => {
-      const { data } = await supabase.from('profiles').select('id, full_name');
-      return data || [];
-    },
-  });
-
-  // Use column preferences hook for database persistence
-  const { 
-    columns: savedColumns, 
-    saveColumns, 
-    isSaving: isSavingColumns,
-    isLoading: columnsLoading 
-  } = useColumnPreferences({
-    moduleName: 'deals',
-    defaultColumns: defaultDealColumns,
-  });
-
-  // Local state for optimistic updates
-  const [localColumns, setLocalColumns] = useState<DealColumnConfig[]>(savedColumns);
-
-  // Sync local columns when saved columns load from DB
-  useEffect(() => {
-    if (savedColumns) {
-      setLocalColumns(savedColumns);
-    }
-  }, [savedColumns]);
-
-  // Column width state
-  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({
-    'project_name': 200,
-    'customer_name': 150,
-    'lead_name': 150,
-    'lead_owner': 140,
-    'stage': 120,
-    'priority': 100,
-    'total_contract_value': 120,
-    'probability': 120,
-    'expected_closing_date': 140,
-    'region': 120,
-    'project_duration': 120,
-    'start_date': 120,
-    'end_date': 120,
-    'proposal_due_date': 140,
-    'total_revenue': 120,
-  });
+  // Column width and visibility preferences from database
+  const { columnWidths, columns, saveColumnWidths, saveColumns } = useDealsColumnPreferences();
 
   // Resize state
   const [isResizing, setIsResizing] = useState<string | null>(null);
   const [startX, setStartX] = useState(0);
   const [startWidth, setStartWidth] = useState(0);
+  const [tempColumnWidths, setTempColumnWidths] = useState<Record<string, number>>(columnWidths);
   const tableRef = useRef<HTMLTableElement>(null);
+
+  // Sync temp widths with persisted widths when they change
+  useEffect(() => {
+    setTempColumnWidths(columnWidths);
+  }, [columnWidths]);
 
   const { toast } = useToast();
 
@@ -160,67 +86,17 @@ export const ListView = ({
   const formatDate = (date: string | undefined) => {
     if (!date) return '-';
     try {
-      return format(new Date(date), 'dd/MM/yyyy');
+      return format(new Date(date), 'MMM dd, yyyy');
     } catch {
       return '-';
     }
-  };
-
-  // Stage badge styling (matching Accounts module)
-  const getStageBadgeClasses = (stage?: string) => {
-    switch (stage) {
-      case 'Won':
-        return 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300 border-emerald-200';
-      case 'Dropped':
-        return 'bg-gray-100 text-gray-600 dark:bg-gray-800/30 dark:text-gray-400 border-gray-200';
-      case 'Lead':
-        return 'bg-slate-100 text-slate-700 dark:bg-slate-800/30 dark:text-slate-300 border-slate-200';
-      case 'Qualified':
-        return 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300 border-blue-200';
-      case 'Discussions':
-        return 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300 border-amber-200';
-      case 'Offered':
-        return 'bg-purple-50 text-purple-700 dark:bg-purple-900/20 dark:text-purple-300 border-purple-200';
-      case 'RFQ':
-        return 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-300 border-indigo-200';
-      default:
-        return 'bg-muted text-muted-foreground border-border';
-    }
-  };
-
-  // Generate initials from project name
-  const getProjectInitials = (name: string) => {
-    return name.split(' ').slice(0, 2).map(word => word.charAt(0).toUpperCase()).join('');
-  };
-
-  // Generate consistent vibrant color from project name
-  const getAvatarColor = (name: string) => {
-    const colors = [
-      'bg-blue-600', 'bg-emerald-600', 'bg-purple-600', 'bg-amber-600', 
-      'bg-rose-600', 'bg-cyan-600', 'bg-indigo-600', 'bg-teal-600'
-    ];
-    const index = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % colors.length;
-    return colors[index];
-  };
-
-  // Get priority label
-  const getPriorityLabel = (priority?: number) => {
-    if (!priority) return '-';
-    const labels: Record<number, string> = {
-      1: 'Highest',
-      2: 'High',
-      3: 'Medium',
-      4: 'Low',
-      5: 'Lowest'
-    };
-    return labels[priority] || 'Unknown';
   };
 
   // Handle column resize
   const handleMouseDown = (e: React.MouseEvent, field: string) => {
     setIsResizing(field);
     setStartX(e.clientX);
-    setStartWidth(columnWidths[field] || 120);
+    setStartWidth(tempColumnWidths[field] || 120);
     e.preventDefault();
   };
 
@@ -230,7 +106,7 @@ export const ListView = ({
     const deltaX = e.clientX - startX;
     const newWidth = Math.max(80, startWidth + deltaX); // Minimum width of 80px
     
-    setColumnWidths(prev => ({
+    setTempColumnWidths(prev => ({
       ...prev,
       [isResizing]: newWidth
     }));
@@ -238,8 +114,8 @@ export const ListView = ({
 
   const handleMouseUp = () => {
     if (isResizing) {
-      // Save to localStorage
-      localStorage.setItem('deals-column-widths', JSON.stringify(columnWidths));
+      // Save to database
+      saveColumnWidths(tempColumnWidths);
       setIsResizing(null);
     }
   };
@@ -254,20 +130,7 @@ export const ListView = ({
         document.removeEventListener('mouseup', handleMouseUp);
       };
     }
-  }, [isResizing, startX, startWidth, columnWidths]);
-
-  // Load column widths from localStorage
-  useEffect(() => {
-    const savedWidths = localStorage.getItem('deals-column-widths');
-    if (savedWidths) {
-      try {
-        const parsed = JSON.parse(savedWidths);
-        setColumnWidths(parsed);
-      } catch (e) {
-        console.error('Failed to parse saved column widths:', e);
-      }
-    }
-  }, []);
+  }, [isResizing, startX, startWidth, tempColumnWidths]);
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
@@ -320,10 +183,9 @@ export const ListView = ({
     }
   };
 
-  const getFieldType = (field: string): 'text' | 'number' | 'date' | 'select' | 'textarea' | 'boolean' | 'stage' | 'priority' | 'currency' | 'userSelect' => {
+  const getFieldType = (field: string): 'text' | 'number' | 'date' | 'select' | 'textarea' | 'boolean' | 'stage' | 'priority' | 'currency' => {
     if (field === 'stage') return 'stage';
     if (field === 'priority') return 'priority';
-    if (field === 'lead_owner') return 'userSelect';
     if (['total_contract_value', 'total_revenue'].includes(field)) return 'currency';
     if (['expected_closing_date', 'start_date', 'end_date', 'proposal_due_date'].includes(field)) return 'date';
     if (['probability', 'project_duration'].includes(field)) return 'number';
@@ -334,7 +196,7 @@ export const ListView = ({
     return [];
   };
 
-  const visibleColumns = localColumns
+  const visibleColumns = columns
     .filter(col => col.visible)
     .sort((a, b) => a.order - b.order);
 
@@ -384,9 +246,6 @@ export const ListView = ({
         deal.customer_name?.toLowerCase().includes(allSearchTerms) ||
         deal.region?.toLowerCase().includes(allSearchTerms);
       
-      // Apply lead owner filter (standalone dropdown)
-      const matchesLeadOwnerDropdown = leadOwnerFilter === "all" || deal.lead_owner === leadOwnerFilter;
-      
       // Apply multi-select filters
       const matchesStages = filters.stages.length === 0 || filters.stages.includes(deal.stage);
       const matchesRegions = filters.regions.length === 0 || filters.regions.includes(deal.region || '');
@@ -399,7 +258,7 @@ export const ListView = ({
       const dealProbability = deal.probability || 0;
       const matchesProbabilityRange = dealProbability >= filters.probabilityRange[0] && dealProbability <= filters.probabilityRange[1];
       
-      return matchesSearch && matchesLeadOwnerDropdown && matchesStages && matchesRegions && matchesLeadOwners && 
+      return matchesSearch && matchesStages && matchesRegions && matchesLeadOwners && 
              matchesPriorities && matchesProbabilities && matchesHandoffStatuses && matchesProbabilityRange;
     })
     .sort((a, b) => {
@@ -439,7 +298,7 @@ export const ListView = ({
   // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [filters, searchTerm, leadOwnerFilter]);
+  }, [filters, searchTerm]);
 
   const getActiveFiltersCount = () => {
     let count = 0;
@@ -469,52 +328,37 @@ export const ListView = ({
   };
 
   const activeFiltersCount = getActiveFiltersCount();
-  const hasActiveFilters = activeFiltersCount > 0 || searchTerm !== "";
+  const hasActiveFilters = activeFiltersCount > 0 || searchTerm;
 
   // Get selected deal objects for export
   const selectedDealObjects = deals.filter(deal => selectedDeals.has(deal.id));
 
-  const handleCreateTask = (deal: Deal) => {
-    setTaskDealId(deal.id);
-    setTaskModalOpen(true);
+  const handleActionClick = (deal: Deal) => {
+    setSelectedDealForActions(deal);
+    setActionModalOpen(true);
   };
 
-  // Listen for column customizer open event from header
-  useEffect(() => {
-    const handleOpenColumns = () => setColumnCustomizerOpen(true);
-    window.addEventListener('open-deal-columns', handleOpenColumns);
-    return () => window.removeEventListener('open-deal-columns', handleOpenColumns);
-  }, []);
+  // Handle page size change
+  const handlePageSizeChange = (size: string) => {
+    setItemsPerPage(Number(size));
+    setCurrentPage(1);
+  };
 
   return (
-    <div className="flex flex-col h-full space-y-3">
-      {/* Header and Actions */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="relative w-64">
-            <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4 pointer-events-none" />
+    <div className="h-full flex flex-col bg-background">
+      {/* Filter Bar - consistent with other modules */}
+      <div className="flex-shrink-0 border-b bg-muted/30 px-6 py-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Search - responsive width like Action Items */}
+          <div className="relative flex-1 min-w-[200px] max-w-[300px]">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
             <Input
-              placeholder="Search deals..."
+              placeholder="Search all deal details..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9"
-              inputSize="control"
+              className="pl-10 transition-all hover:border-primary/50 focus:border-primary"
             />
           </div>
-          
-          <Select value={leadOwnerFilter} onValueChange={setLeadOwnerFilter}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="All Lead Owners" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Lead Owners</SelectItem>
-              {availableOptions.leadOwners.map((owner) => (
-                <SelectItem key={owner} value={owner}>
-                  {owner}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
           
           <DealsAdvancedFilter 
             filters={filters} 
@@ -526,43 +370,52 @@ export const ListView = ({
             availableHandoffStatuses={availableOptions.handoffStatuses}
           />
 
-          <ClearFiltersButton hasActiveFilters={hasActiveFilters} onClear={clearAllFilters} />
-        </div>
-        
-        {/* Page size selector */}
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">Show:</span>
-          <Select value={itemsPerPage.toString()} onValueChange={val => setItemsPerPage(Number(val))}>
-            <SelectTrigger className="w-[70px] h-8">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {PAGE_SIZE_OPTIONS.map(size => <SelectItem key={size} value={size.toString()}>{size}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          {hasActiveFilters && (
+            <Button 
+              variant="ghost" 
+              size="sm"
+              onClick={clearAllFilters}
+              className="flex items-center gap-2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="w-4 h-4" />
+              Clear All
+            </Button>
+          )}
+
+          {/* Spacer */}
+          <div className="flex-1" />
+
+          <DealActionsDropdown
+            deals={deals}
+            onImport={onImportDeals}
+            onRefresh={() => {}}
+            selectedDeals={selectedDealObjects}
+            onColumnCustomize={() => setColumnCustomizerOpen(true)}
+            showColumns={true}
+          />
         </div>
       </div>
 
-      <Card className="flex-1 min-h-0 flex flex-col">
-        <div className="relative overflow-auto flex-1">
+      {/* Content Area - single scroll container */}
+      <div className="flex-1 min-h-0 overflow-auto">
         <Table ref={tableRef} className="w-full">
-          <TableHeader>
-            <TableRow className="sticky top-0 z-20 bg-muted border-b-2">
-              <TableHead className="w-12 min-w-12 text-center font-bold text-foreground">
-                <Checkbox
-                  checked={selectedDeals.size === paginatedDeals.length && paginatedDeals.length > 0}
-                  onCheckedChange={handleSelectAll}
-                  className="transition-all hover:scale-110"
-                />
-              </TableHead>
+          <TableHeader className="sticky top-0 bg-muted/80 backdrop-blur-sm z-20 border-b-2">
+            <TableRow className="hover:bg-muted/60 transition-colors border-b">
+              <TableHead className="w-10 min-w-10 py-3 px-3 h-11 bg-muted/80">
+                  <Checkbox
+                    checked={selectedDeals.size === paginatedDeals.length && paginatedDeals.length > 0}
+                    onCheckedChange={handleSelectAll}
+                    className="transition-all hover:scale-110"
+                  />
+                </TableHead>
               {visibleColumns.map(column => (
                 <TableHead 
                   key={column.field} 
-                  className="font-bold text-foreground px-4 py-3 cursor-pointer hover:bg-muted/50 transition-colors relative whitespace-nowrap"
+                  className="text-sm font-semibold cursor-pointer hover:bg-muted transition-colors relative bg-muted/80 py-3 px-3 h-11"
                   style={{ 
-                    width: `${columnWidths[column.field] || 120}px`,
-                    minWidth: `${columnWidths[column.field] || 120}px`,
-                    maxWidth: `${columnWidths[column.field] || 120}px`
+                    width: `${tempColumnWidths[column.field] || 120}px`,
+                    minWidth: `${tempColumnWidths[column.field] || 120}px`,
+                    maxWidth: `${tempColumnWidths[column.field] || 120}px`
                   }}
                   onClick={() => {
                     if (sortBy === column.field) {
@@ -573,10 +426,12 @@ export const ListView = ({
                     }
                   }}
                 >
-                  <div className="flex items-center justify-center gap-2 pr-4 text-foreground font-bold">
+                  <div className="flex items-center gap-2 pr-4 text-foreground">
                     {column.label}
-                    {sortBy === column.field && (
-                      sortOrder === "asc" ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />
+                    {sortBy !== column.field ? (
+                      <ArrowUpDown className="w-3 h-3 text-muted-foreground/40" />
+                    ) : (
+                      sortOrder === "asc" ? <ArrowUp className="w-3 h-3 text-foreground" /> : <ArrowDown className="w-3 h-3 text-foreground" />
                     )}
                   </div>
                   <div
@@ -588,224 +443,192 @@ export const ListView = ({
                   />
                 </TableHead>
               ))}
-              <TableHead className="w-32 text-center font-bold text-foreground px-4 py-3">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
+              <TableHead className="w-20 min-w-20 bg-muted/80 py-3 px-3 h-11"></TableHead>
+              </TableRow>
+            </TableHeader>
           <TableBody>
             {filteredAndSortedDeals.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={visibleColumns.length + 2} className="text-center py-8">
-                  <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                    <Briefcase className="w-10 h-10 opacity-50" />
-                    <p>No deals found</p>
-                    {hasActiveFilters && (
-                      <Button variant="link" size="sm" onClick={clearAllFilters}>
-                        Clear filters
-                      </Button>
-                    )}
-                  </div>
+                <TableCell colSpan={visibleColumns.length + 2} className="text-center py-8 text-muted-foreground">
+                  No deals found
                 </TableCell>
               </TableRow>
             ) : (
               paginatedDeals.map((deal) => (
                 <TableRow 
                   key={deal.id} 
-                  className={`hover:bg-muted/20 border-b group ${selectedDeals.has(deal.id) ? 'bg-muted/30' : ''}`}
-                  data-state={selectedDeals.has(deal.id) ? "selected" : undefined}
+                  className={`group hover:bg-muted/50 transition-all ${
+                    selectedDeals.has(deal.id) ? 'bg-primary/5' : ''
+                  }`}
                 >
-                  <TableCell onClick={(e) => e.stopPropagation()} className="text-center px-4 py-3">
-                    <div className="flex justify-center">
-                      <Checkbox
-                        checked={selectedDeals.has(deal.id)}
-                        onCheckedChange={(checked) => handleSelectDeal(deal.id, Boolean(checked))}
-                      />
-                    </div>
+                  <TableCell className="py-2 px-3" onClick={(e) => e.stopPropagation()}>
+                    <Checkbox
+                      checked={selectedDeals.has(deal.id)}
+                      onCheckedChange={(checked) => handleSelectDeal(deal.id, Boolean(checked))}
+                    />
                   </TableCell>
                   {visibleColumns.map(column => (
                     <TableCell 
                       key={column.field} 
-                      className="text-left px-4 py-3 align-middle whitespace-nowrap overflow-hidden text-ellipsis"
+                      className="text-sm py-2 px-3"
                       style={{ 
-                        width: `${columnWidths[column.field] || 120}px`,
-                        minWidth: `${columnWidths[column.field] || 120}px`,
-                        maxWidth: `${columnWidths[column.field] || 120}px`
+                        width: `${tempColumnWidths[column.field] || 120}px`,
+                        minWidth: `${tempColumnWidths[column.field] || 120}px`,
+                        maxWidth: `${tempColumnWidths[column.field] || 120}px`
                       }}
                     >
-                      {column.field === 'project_name' || column.field === 'deal_name' ? (
-                        deal[column.field as keyof Deal] ? (
-                          <button 
-                            onClick={() => onDealClick(deal)}
-                            className="text-primary hover:underline font-medium text-left truncate"
-                            title={deal[column.field as keyof Deal]?.toString()}
-                          >
-                            <HighlightedText text={deal[column.field as keyof Deal]?.toString() || ''} highlight={searchTerm} />
-                          </button>
-                        ) : (
-                          <span className="text-center text-muted-foreground w-full block">-</span>
-                        )
-                      ) : column.field === 'customer_name' ? (
-                        <span className={`truncate block ${!deal.customer_name ? 'text-center text-muted-foreground' : ''}`}>
-                          {deal.customer_name ? <HighlightedText text={deal.customer_name} highlight={searchTerm} /> : '-'}
-                        </span>
-                      ) : column.field === 'lead_name' ? (
-                        <span className={`truncate block ${!deal.lead_name ? 'text-center text-muted-foreground' : ''}`}>
-                          {deal.lead_name ? <HighlightedText text={deal.lead_name} highlight={searchTerm} /> : '-'}
-                        </span>
-                      ) : column.field === 'stage' ? (
-                        deal.stage ? (
-                          <Badge variant="outline" className={`whitespace-nowrap ${getStageBadgeClasses(deal.stage)}`}>
-                            {deal.stage}
-                          </Badge>
-                        ) : <span className="text-center text-muted-foreground block">-</span>
-                      ) : column.field === 'priority' ? (
-                        <span className={`truncate block ${!deal.priority ? 'text-center text-muted-foreground' : ''}`}>
-                          {deal.priority ? `${deal.priority} (${getPriorityLabel(deal.priority)})` : '-'}
-                        </span>
-                      ) : column.field === 'total_contract_value' || column.field === 'total_revenue' ? (
-                        deal[column.field as keyof Deal] ? (
-                          <span className="font-medium">{formatCurrency(deal[column.field as keyof Deal] as number, deal.currency_type)}</span>
-                        ) : (
-                          <span className="text-center text-muted-foreground w-full block">-</span>
-                        )
-                      ) : column.field === 'probability' ? (
-                        <span className={`${
-                          deal.probability != null ? (
-                            (deal.probability || 0) >= 70 ? 'font-medium text-green-600 dark:text-green-400' : 
-                            (deal.probability || 0) >= 40 ? 'font-medium text-amber-600 dark:text-amber-400' : 
-                            'font-medium text-muted-foreground'
-                          ) : 'text-center text-muted-foreground'
-                        }`}>
-                          {deal.probability != null ? `${deal.probability}%` : '-'}
-                        </span>
-                      ) : column.field === 'expected_closing_date' || column.field === 'start_date' || column.field === 'end_date' || column.field === 'proposal_due_date' ? (
-                        <span className={`truncate block ${!deal[column.field as keyof Deal] ? 'text-center text-muted-foreground' : ''}`}>{formatDate(deal[column.field as keyof Deal] as string)}</span>
-                      ) : column.field === 'lead_owner' ? (
-                        <span className={`truncate block ${!deal.lead_owner ? 'text-center text-muted-foreground' : ''}`}>
-                          {deal.lead_owner || '-'}
-                        </span>
-                      ) : column.field === 'region' ? (
-                        <span className={`truncate block ${!deal.region ? 'text-center text-muted-foreground' : ''}`}>{deal.region || '-'}</span>
-                      ) : column.field === 'project_duration' ? (
-                        <span className={`truncate block ${!deal.project_duration ? 'text-center text-muted-foreground' : ''}`}>{deal.project_duration ? `${deal.project_duration} months` : '-'}</span>
-                      ) : (
-                        <span title={deal[column.field as keyof Deal]?.toString() || '-'} className={`truncate block ${!deal[column.field as keyof Deal] ? 'text-center text-muted-foreground' : ''}`}>
-                          {deal[column.field as keyof Deal]?.toString() || '-'}
-                        </span>
-                      )}
+                      <InlineEditCell
+                        value={deal[column.field as keyof Deal]}
+                        field={column.field}
+                        dealId={deal.id}
+                        onSave={handleInlineEdit}
+                        type={getFieldType(column.field)}
+                        options={getFieldOptions(column.field)}
+                      />
                     </TableCell>
                   ))}
-                  <TableCell className="w-20 px-4 py-3">
-                    <div className="flex items-center justify-center">
-                      <RowActionsDropdown
-                        actions={[
-                          {
-                            label: "Create Task",
-                            icon: <CheckSquare className="w-4 h-4" />,
-                            onClick: () => handleCreateTask(deal)
-                          },
-                          {
-                            label: "Edit",
-                            icon: <Edit className="w-4 h-4" />,
-                            onClick: () => onDealClick(deal)
-                          },
-                          {
-                            label: "Delete",
-                            icon: <Trash2 className="w-4 h-4" />,
-                            onClick: () => {
-                              setDealToDelete(deal);
+                  <TableCell className="py-2 px-2" onClick={(e) => e.stopPropagation()}>
+                    <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex justify-center">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 p-0">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => onDealClick(deal)}>
+                            <Pencil className="h-4 w-4 mr-2" />
+                            Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleActionClick(deal)}>
+                            <ListTodo className="h-4 w-4 mr-2" />
+                            Action Items
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem 
+                            onClick={() => {
+                              setDealToDelete(deal.id);
                               setDeleteDialogOpen(true);
-                            },
-                            destructive: true,
-                            separator: true
-                          }
-                        ]}
-                      />
+                            }}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </TableCell>
                 </TableRow>
               ))
             )}
           </TableBody>
-          </Table>
-        </div>
-      </Card>
+        </Table>
+      </div>
 
-      {/* Bulk Actions */}
+      {/* Bulk Actions Bar */}
       {selectedDeals.size > 0 && (
-        <BulkActionsBar
-          selectedCount={selectedDeals.size}
-          onDelete={handleBulkDelete}
-          onExport={handleBulkExport}
-          onClearSelection={() => setSelectedDeals(new Set())}
-        />
+        <div className="flex-shrink-0 border-t bg-primary/5">
+          <BulkActionsBar
+            selectedCount={selectedDeals.size}
+            onDelete={handleBulkDelete}
+            onExport={handleBulkExport}
+            onClearSelection={() => setSelectedDeals(new Set())}
+          />
+        </div>
       )}
 
-      {/* Pagination */}
-      {totalPages > 0 && (
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">
-              Showing {filteredAndSortedDeals.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredAndSortedDeals.length)} of {filteredAndSortedDeals.length} deals
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} 
-              disabled={currentPage === 1}
-            >
-              <ChevronLeft className="w-4 h-4" />
-              Previous
-            </Button>
-            <span className="text-sm">
-              Page {currentPage} of {totalPages || 1}
-            </span>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} 
-              disabled={currentPage === totalPages || totalPages === 0}
-            >
-              Next
-              <ChevronRight className="w-4 h-4" />
-            </Button>
+      {/* Standard Pagination Footer - matching Action Items */}
+      {filteredAndSortedDeals.length > 0 && (
+        <div className="flex-shrink-0 border-t bg-background px-6 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-muted-foreground">
+                Showing {startIndex + 1}-{Math.min(startIndex + itemsPerPage, filteredAndSortedDeals.length)} of {filteredAndSortedDeals.length} deals
+              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Show:</span>
+                <Select value={itemsPerPage.toString()} onValueChange={handlePageSizeChange}>
+                  <SelectTrigger className="w-[70px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="25">25</SelectItem>
+                    <SelectItem value="50">50</SelectItem>
+                    <SelectItem value="100">100</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                Previous
+              </Button>
+              <span className="text-sm px-2">
+                Page {currentPage} of {totalPages || 1}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage >= totalPages}
+              >
+                Next
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
           </div>
         </div>
       )}
 
-      <TaskModal
-        open={taskModalOpen}
-        onOpenChange={setTaskModalOpen}
-        onSubmit={createTask}
-        context={taskDealId ? { module: 'deals', recordId: taskDealId, locked: true } : undefined}
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Deal</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this deal? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={() => {
+                if (dealToDelete) {
+                  onDeleteDeals([dealToDelete]);
+                  toast({
+                    title: "Deal deleted",
+                    description: "Deal has been successfully deleted",
+                  });
+                }
+                setDealToDelete(null);
+                setDeleteDialogOpen(false);
+              }} 
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <DealActionItemsModal
+        open={actionModalOpen}
+        onOpenChange={setActionModalOpen}
+        deal={selectedDealForActions}
       />
 
       <DealColumnCustomizer
         open={columnCustomizerOpen}
         onOpenChange={setColumnCustomizerOpen}
-        columns={localColumns}
-        onColumnsChange={setLocalColumns}
-        onSave={saveColumns}
-        isSaving={isSavingColumns}
-      />
-
-      <DeleteConfirmDialog
-        open={deleteDialogOpen}
-        onOpenChange={setDeleteDialogOpen}
-        onConfirm={() => {
-          if (dealToDelete) {
-            onDeleteDeals([dealToDelete.id]);
-            toast({
-              title: "Deal deleted",
-              description: `Successfully deleted ${dealToDelete.project_name || 'deal'}`,
-            });
-            setDealToDelete(null);
-          }
-        }}
-        title="Delete Deal"
-        itemName={dealToDelete?.project_name || 'this deal'}
-        itemType="deal"
+        columns={columns}
+        onColumnsChange={saveColumns}
       />
     </div>
   );

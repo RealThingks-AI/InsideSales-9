@@ -207,10 +207,11 @@ serve(async (req) => {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
             }
           );
-        } catch (error: unknown) {
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
           console.error('Error in change-role:', error);
           return new Response(
-            JSON.stringify({ error: `Role update failed: ${error instanceof Error ? error.message : 'Unknown error'}` }),
+            JSON.stringify({ error: `Role update failed: ${errorMessage}` }),
             { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
@@ -416,45 +417,201 @@ serve(async (req) => {
 
       console.log('Admin deleting user:', userId);
 
-      try {
-        // First, clean up all references to this user in public tables
-        // Set NULL for columns that reference auth.users with ON DELETE SET NULL
-        console.log('Cleaning up user references before deletion...');
-        
-        // Clean up deals table
-        await supabaseAdmin.from('deals').update({ created_by: null }).eq('created_by', userId);
-        await supabaseAdmin.from('deals').update({ modified_by: null }).eq('modified_by', userId);
-        
-        // Clean up leads table
-        await supabaseAdmin.from('leads').update({ created_by: null }).eq('created_by', userId);
-        await supabaseAdmin.from('leads').update({ modified_by: null }).eq('modified_by', userId);
-        await supabaseAdmin.from('leads').update({ contact_owner: null }).eq('contact_owner', userId);
-        
-        // Clean up contacts table
-        await supabaseAdmin.from('contacts').update({ created_by: null }).eq('created_by', userId);
-        await supabaseAdmin.from('contacts').update({ modified_by: null }).eq('modified_by', userId);
-        await supabaseAdmin.from('contacts').update({ contact_owner: null }).eq('contact_owner', userId);
-        
-        // Clean up deal_action_items table
-        await supabaseAdmin.from('deal_action_items').update({ created_by: null }).eq('created_by', userId);
-        await supabaseAdmin.from('deal_action_items').update({ assigned_to: null }).eq('assigned_to', userId);
-        
-        // Clean up lead_action_items table
-        await supabaseAdmin.from('lead_action_items').update({ created_by: null }).eq('created_by', userId);
-        await supabaseAdmin.from('lead_action_items').update({ assigned_to: null }).eq('assigned_to', userId);
-        
-        // Clean up user_roles assigned_by
-        await supabaseAdmin.from('user_roles').update({ assigned_by: null }).eq('assigned_by', userId);
-        
-        // Clean up security_audit_log
-        await supabaseAdmin.from('security_audit_log').update({ user_id: null }).eq('user_id', userId);
-        
-        // Clean up yearly_revenue_targets
-        await supabaseAdmin.from('yearly_revenue_targets').update({ created_by: null }).eq('created_by', userId);
-        
-        console.log('User references cleaned up, now deleting auth user...');
+      // Prevent self-deletion: it will always violate FKs like deals_created_by_fkey
+      // because we cannot reassign records away from a user that is simultaneously
+      // the deleter (and is about to be removed from auth.users).
+      if (userId === user.user.id) {
+        console.log('Blocked self-deletion attempt by admin:', user.user.email);
+        return new Response(
+          JSON.stringify({
+            error: 'Admins cannot delete their own account. Please sign in as a different admin to delete this user.'
+          }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
 
-        // Delete the auth user (cascade will handle remaining records like profiles, user_roles, etc.)
+      try {
+        // First, handle all dependent records to avoid foreign key violations
+        
+        // 1. Delete or reassign deal action items
+        const { error: dealActionError } = await supabaseAdmin
+          .from('deal_action_items')
+          .delete()
+          .or(`created_by.eq.${userId},assigned_to.eq.${userId}`);
+        
+        if (dealActionError) {
+          console.warn('Error deleting deal action items:', dealActionError);
+        }
+
+        // 2. Delete or reassign lead action items
+        const { error: leadActionError } = await supabaseAdmin
+          .from('lead_action_items')
+          .delete()
+          .or(`created_by.eq.${userId},assigned_to.eq.${userId}`);
+        
+        if (leadActionError) {
+          console.warn('Error deleting lead action items:', leadActionError);
+        }
+
+        // 3. Clear user references in deals (set to null where possible, or reassign to admin)
+        const { error: dealsCreatedByError } = await supabaseAdmin
+          .from('deals')
+          .update({ created_by: user.user.id }) // Reassign to the admin performing the deletion
+          .eq('created_by', userId);
+        
+        if (dealsCreatedByError) {
+          console.warn('Error updating deals created_by:', dealsCreatedByError);
+        }
+
+        const { error: dealsModifiedByError } = await supabaseAdmin
+          .from('deals')
+          .update({ modified_by: null })
+          .eq('modified_by', userId);
+        
+        if (dealsModifiedByError) {
+          console.warn('Error updating deals modified_by:', dealsModifiedByError);
+        }
+
+        // 4. Clear user references in leads
+        const { error: leadsCreatedByError } = await supabaseAdmin
+          .from('leads')
+          .update({ created_by: user.user.id })
+          .eq('created_by', userId);
+        
+        if (leadsCreatedByError) {
+          console.warn('Error updating leads created_by:', leadsCreatedByError);
+        }
+
+        const { error: leadsModifiedByError } = await supabaseAdmin
+          .from('leads')
+          .update({ modified_by: null })
+          .eq('modified_by', userId);
+        
+        if (leadsModifiedByError) {
+          console.warn('Error updating leads modified_by:', leadsModifiedByError);
+        }
+
+        const { error: leadsOwnerError } = await supabaseAdmin
+          .from('leads')
+          .update({ contact_owner: null })
+          .eq('contact_owner', userId);
+        
+        if (leadsOwnerError) {
+          console.warn('Error updating leads contact_owner:', leadsOwnerError);
+        }
+
+        // 5. Clear user references in contacts
+        const { error: contactsCreatedByError } = await supabaseAdmin
+          .from('contacts')
+          .update({ created_by: user.user.id })
+          .eq('created_by', userId);
+        
+        if (contactsCreatedByError) {
+          console.warn('Error updating contacts created_by:', contactsCreatedByError);
+        }
+
+        const { error: contactsModifiedByError } = await supabaseAdmin
+          .from('contacts')
+          .update({ modified_by: null })
+          .eq('modified_by', userId);
+        
+        if (contactsModifiedByError) {
+          console.warn('Error updating contacts modified_by:', contactsModifiedByError);
+        }
+
+        const { error: contactsOwnerError } = await supabaseAdmin
+          .from('contacts')
+          .update({ contact_owner: null })
+          .eq('contact_owner', userId);
+        
+        if (contactsOwnerError) {
+          console.warn('Error updating contacts contact_owner:', contactsOwnerError);
+        }
+
+        // 6. Delete notifications for the user
+        const { error: notificationsError } = await supabaseAdmin
+          .from('notifications')
+          .delete()
+          .eq('user_id', userId);
+        
+        if (notificationsError) {
+          console.warn('Error deleting notifications:', notificationsError);
+        }
+
+        // 7. Delete saved filters
+        const { error: filtersError } = await supabaseAdmin
+          .from('saved_filters')
+          .delete()
+          .eq('user_id', userId);
+        
+        if (filtersError) {
+          console.warn('Error deleting saved filters:', filtersError);
+        }
+
+        // 8. Delete dashboard preferences
+        const { error: dashPrefError } = await supabaseAdmin
+          .from('dashboard_preferences')
+          .delete()
+          .eq('user_id', userId);
+        
+        if (dashPrefError) {
+          console.warn('Error deleting dashboard preferences:', dashPrefError);
+        }
+
+        // 9. Delete user preferences
+        const { error: userPrefError } = await supabaseAdmin
+          .from('user_preferences')
+          .delete()
+          .eq('user_id', userId);
+        
+        if (userPrefError) {
+          console.warn('Error deleting user preferences:', userPrefError);
+        }
+
+        // 10. Delete user role
+        const { error: roleDeleteError } = await supabaseAdmin
+          .from('user_roles')
+          .delete()
+          .eq('user_id', userId);
+        
+        if (roleDeleteError) {
+          console.warn('Error deleting user role:', roleDeleteError);
+        }
+
+        // 10b. Reassign "assigned_by" references (FK to auth.users)
+        // If the deleted user assigned roles to others, we must detach that reference.
+        const { error: roleAssignedByUpdateError } = await supabaseAdmin
+          .from('user_roles')
+          .update({ assigned_by: user.user.id })
+          .eq('assigned_by', userId);
+
+        if (roleAssignedByUpdateError) {
+          console.warn('Error updating user_roles assigned_by:', roleAssignedByUpdateError);
+        }
+
+        // 10c. Reassign revenue target creator references (FK to auth.users)
+        const { error: revenueTargetsUpdateError } = await supabaseAdmin
+          .from('yearly_revenue_targets')
+          .update({ created_by: user.user.id })
+          .eq('created_by', userId);
+
+        if (revenueTargetsUpdateError) {
+          console.warn('Error updating yearly_revenue_targets created_by:', revenueTargetsUpdateError);
+        }
+
+        // 11. Delete profile
+        const { error: profileDeleteError } = await supabaseAdmin
+          .from('profiles')
+          .delete()
+          .eq('id', userId);
+        
+        if (profileDeleteError) {
+          console.warn('Error deleting profile:', profileDeleteError);
+        }
+
+        console.log('Cleaned up related records, now deleting auth user');
+
+        // Finally, delete the auth user
         const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(userId);
 
         if (authDeleteError) {

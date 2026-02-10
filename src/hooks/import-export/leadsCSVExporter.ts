@@ -1,6 +1,5 @@
 
 import { supabase } from '@/integrations/supabase/client';
-import { UserNameUtils } from '@/utils/userNameUtils';
 
 export class LeadsCSVExporter {
   async exportLeads(leads: any[]): Promise<string> {
@@ -28,11 +27,6 @@ export class LeadsCSVExporter {
       'modified_time',
       'action_items_json'
     ];
-
-    // Fetch user display names for all user fields
-    const userIds = UserNameUtils.extractUserIds(leads, ['contact_owner', 'created_by', 'modified_by']);
-    const userNameMap = await UserNameUtils.fetchUserDisplayNames(userIds);
-    console.log('LeadsCSVExporter: Fetched display names for', Object.keys(userNameMap).length, 'users');
 
     const csvRows = [];
     
@@ -67,28 +61,18 @@ export class LeadsCSVExporter {
           value = lead[field];
         }
 
-        // Format ID (shortened)
-        if (field === 'id' && value) {
-          return UserNameUtils.formatIdForExport(value);
-        }
-
-        // Convert UUID to display name for user fields
-        if (UserNameUtils.isUserField(field) && value) {
-          const displayName = userNameMap[value] || '';
-          return this.escapeCSVValue(displayName);
-        }
-
-        // Format datetime fields
-        if (UserNameUtils.isDateTimeField(field) && value) {
-          return this.escapeCSVValue(UserNameUtils.formatDateTimeForExport(value));
-        }
-
         // Handle null/undefined values
         if (value === null || value === undefined) {
           return '';
         }
 
-        return this.escapeCSVValue(String(value));
+        // Convert to string and escape quotes
+        const stringValue = String(value);
+        if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
+          return `"${stringValue.replace(/"/g, '""')}"`;
+        }
+        
+        return stringValue;
       });
 
       csvRows.push(rowValues.join(','));
@@ -97,12 +81,5 @@ export class LeadsCSVExporter {
     const csvContent = csvRows.join('\n');
     console.log('LeadsCSVExporter: Export completed');
     return csvContent;
-  }
-
-  private escapeCSVValue(value: string): string {
-    if (value.includes(',') || value.includes('"') || value.includes('\n')) {
-      return `"${value.replace(/"/g, '""')}"`;
-    }
-    return value;
   }
 }

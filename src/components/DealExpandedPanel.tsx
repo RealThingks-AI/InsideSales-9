@@ -67,11 +67,8 @@ const formatHistoryDateTime = (date: Date): string => {
 const formatValue = (value: unknown): string => {
   if (value === null || value === undefined || value === '') return '-';
   if (typeof value === 'object') {
-    try {
-      return JSON.stringify(value);
-    } catch {
-      return String(value);
-    }
+    // Don't stringify objects - they should be rendered by renderFormattedDetails
+    return '[See details]';
    }
   return String(value);
 };
@@ -111,9 +108,12 @@ const parseFieldChanges = (details: Record<string, unknown> | null): FieldChange
       }));
   }
   
-  // Final fallback: just show the details keys
+  // Final fallback: only show scalar values, skip nested objects (handled by renderFormattedDetails)
   return Object.entries(details)
-    .filter(([key]) => !['modified_at', 'modified_by', 'id', 'field_changes', 'old_data', 'updated_fields'].includes(key))
+    .filter(([key, value]) => 
+      !['modified_at', 'modified_by', 'id', 'field_changes', 'old_data', 'updated_fields', 'record_data', 'timestamp'].includes(key) &&
+      (typeof value !== 'object' || value === null)
+    )
     .map(([field, value]) => ({
       field: field.replace(/_/g, ' '),
       oldValue: '-',
@@ -488,10 +488,13 @@ const parseChangeSummary = (action: string, details: Record<string, unknown> | n
     const renderFormattedDetails = (details: any) => {
       if (!details || typeof details !== 'object') return null;
 
-      const { module, status, operation, timestamp, field_changes, old_data, updated_fields, ...rest } = details;
+      const { module, status, operation, timestamp, field_changes, old_data, updated_fields, record_data, ...rest } = details;
 
-      // Collect record data from old_data or updated_fields or remaining keys
-      const recordData = old_data || updated_fields || (Object.keys(rest).length > 0 ? rest : null);
+      // Collect record data from record_data, old_data, updated_fields, or remaining object keys
+      const remainingObjectData = Object.fromEntries(
+        Object.entries(rest).filter(([, v]) => v !== null && v !== undefined && typeof v !== 'object')
+      );
+      const recordData = record_data || old_data || updated_fields || (Object.keys(remainingObjectData).length > 0 ? remainingObjectData : null);
 
       return (
         <div className="space-y-3">
@@ -1039,14 +1042,14 @@ const parseChangeSummary = (action: string, details: Record<string, unknown> | n
                     </div>
                   )}
 
-                  {/* Show formatted details for create entries */}
-                  {changes.length === 0 && !isManualEntry && selectedLog.action === 'create' && details && (
+                  {/* Show formatted details - always render when details has nested data */}
+                  {!isManualEntry && details && (details.record_data || details.old_data || details.updated_fields || (selectedLog.action === 'create')) && (
                     <div>{renderFormattedDetails(details)}</div>
                   )}
-                  {changes.length === 0 && !isManualEntry && selectedLog.action === 'create' && !details && (
+                  {!isManualEntry && selectedLog.action === 'create' && !details && (
                     <p className="text-muted-foreground text-xs italic">Deal was created</p>
                   )}
-                  {changes.length === 0 && !isManualEntry && selectedLog.action !== 'create' && details && !details.action_item_title && (
+                  {changes.length === 0 && !isManualEntry && selectedLog.action !== 'create' && details && !details.action_item_title && !details.record_data && !details.old_data && !details.updated_fields && (
                     <div>{renderFormattedDetails(details)}</div>
                   )}
                 </div>

@@ -1,57 +1,29 @@
 
+# Fix Raw JSON Display in History Details
 
-# Fix Details Section UX Issues
+## Problem
+When viewing History Details for CREATE entries, nested data (like `record_data`) is displayed as raw JSON strings instead of a user-friendly format. This happens because:
+1. The `parseFieldChanges` fallback treats every key (including nested objects) as a "field change" and stringifies objects
+2. The well-formatted `renderFormattedDetails` function never runs because `parseFieldChanges` always produces results
 
-## Issue 1: "Details" Panel Header Overlapping Table Content
-The panel header labeled "Details" (line 476) does not have a proper z-index, so when scrolling within the Action Items table, the sticky table header (`z-10`) visually conflicts with the panel header. The fix is to give the panel header a higher z-index (`z-20`) to ensure it always stays on top.
-
-## Issue 2: Raw JSON in History Details Dialog
-When viewing a history log entry, the "Details" section currently renders the full JSON blob using `JSON.stringify` in a `<pre>` tag. This is not readable. The fix is to replace the raw JSON with a structured, human-readable layout.
-
----
-
-## Technical Changes
+## Solution
 
 ### File: `src/components/DealExpandedPanel.tsx`
 
-**Fix 1 - Header z-index (line 475)**
-- Add `z-20` to the panel header div so it stays above the sticky table headers
+**Change 1 - Fix `formatValue` (line 67)**
+When `formatValue` encounters an object value, instead of `JSON.stringify`, format it as a readable key-value string or return a placeholder. This prevents raw JSON from appearing anywhere in the field changes table.
 
-**Fix 2 - Replace raw JSON details (lines 939-953)**
-Replace the raw `JSON.stringify` blocks with a helper function that renders details in a structured format:
+**Change 2 - Fix `parseFieldChanges` fallback (lines 114-121)**
+In the final fallback section, skip keys whose values are objects (like `record_data`, `old_data`, `updated_fields`). This ensures that nested record data is not shoved into the field changes table as JSON. Only scalar values (strings, numbers, booleans) will appear as field change rows.
 
-- Create a `renderFormattedDetails` helper that:
-  - Extracts key sections: module, status, operation, timestamp
-  - Shows a summary card with those top-level fields
-  - For `field_changes`: renders a compact table with Field / Old / New columns (reusing existing field changes table pattern)
-  - For `old_data` and `updated_fields`: renders a grouped key-value list with:
-    - Human-readable labels (snake_case converted to Title Case)
-    - Null values shown as "--" in muted text
-    - Dates formatted nicely
-    - UUIDs truncated
-    - Values grouped by category (Basic Info, Dates, Revenue, Status fields)
-  - Hides internal fields like `id`, `created_by`, `modified_by` from the display
-  - Uses existing UI components (badges, muted text, small cards)
+**Change 3 - Ensure `renderFormattedDetails` handles `record_data` (line 488)**
+Update `renderFormattedDetails` to also extract and display `record_data` from the details object. Currently it only checks for `old_data` and `updated_fields` but CREATE entries often store the record in a `record_data` key. The record snapshot section will then render each field as a human-readable key-value pair using the existing `formatDetailValue` helper (which already handles dates, currencies, percentages, and UUIDs).
 
-- Replace the two `<pre>` blocks (lines 942-943 and 951-952) with calls to `renderFormattedDetails(details)`
+**Change 4 - Fix condition for showing `renderFormattedDetails` (lines 1042-1051)**
+Adjust the condition so `renderFormattedDetails` is shown when the field changes table only has scalar metadata rows (module, status, operation, timestamp) but no actual data changes. Alternatively, always call `renderFormattedDetails` when there is a `record_data` key present, regardless of whether `parseFieldChanges` returned results.
 
-**Result**: Instead of raw JSON, users see a clean layout like:
-```
-Module: Deals    Status: Success    Operation: UPDATE
-
-Field Changes:
-| Field       | Old Value              | New Value              |
-|-------------|------------------------|------------------------|
-| modified at | Jan 5, 2026 9:04 AM    | Feb 1, 2026 1:03 PM    |
-
-Record Snapshot:
-  Deal Name: Stella Brain
-  Customer: Stellantis
-  Stage: Qualified
-  Budget: EUR 0
-  Probability: 20%
-  Lead Owner: Peter Jakobsson
-  ...
-```
-
-Null fields will be hidden or shown as "--" to keep the view clean.
+## Result
+- CREATE entries will show a clean summary (Module, Status, Operation badges) plus a "Record Snapshot" with all fields rendered as readable labels and values
+- No raw JSON will appear anywhere in the History Details dialog
+- UPDATE entries with `field_changes` will continue to show the Old/New value table as before
+- Dates will be formatted, numbers will be localized, UUIDs will be truncated, and nulls will show "--"

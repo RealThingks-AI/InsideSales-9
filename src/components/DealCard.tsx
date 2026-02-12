@@ -86,7 +86,7 @@ export const DealCard = ({
         isDragging && 'opacity-50 rotate-2 scale-105',
         isSelected && 'ring-2 ring-primary bg-primary/5 border-primary',
         selectionMode && 'pl-8',
-        isExpanded && 'ring-2 ring-primary ring-offset-2 shadow-xl scale-[1.02] border-primary z-10',
+        isExpanded && 'ring-2 ring-primary shadow-xl border-primary z-10',
         isDimmed && 'deal-card-dimmed'
       )}
       onClick={onClick}
@@ -136,7 +136,7 @@ export const DealCard = ({
               <div className="w-12 bg-muted/50 rounded-full h-1.5">
                 <div 
                   className="bg-primary/70 rounded-full h-1.5 transition-all duration-300" 
-                  style={{ width: `${deal.probability}%` }}
+                  style={{ width: `${Math.max(deal.probability || 0, 2)}%` }}
                 />
               </div>
               <span className="text-xs font-medium text-foreground">{deal.probability}%</span>

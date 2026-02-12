@@ -1,51 +1,47 @@
 
+# Make Column Headers Sticky Across All Modules
 
-# Fix 3 Remaining Kanban Issues
+## Problem
+Only the Deals list view has properly sticky column headers. The other modules (Contacts, Accounts, Leads, Action Items) either have nested scroll containers that break CSS `sticky`, or use semi-transparent backgrounds (`bg-muted/50`) that let scrolling content bleed through.
 
-## 1. Card Size Stability When Expanded
+## Root Cause
+The Deals ListView works because:
+1. It uses a single scroll container (`overflow-scroll`) with the Table directly inside
+2. The sticky header uses `bg-muted/80 backdrop-blur-sm z-20` for an opaque, polished look
 
-**File:** `src/components/DealCard.tsx` (line 83, 89)
+The other modules fail because:
+- **Contacts**: `ContactTableBody` wraps the table in an extra `overflow-auto` div, creating a nested scroll container that breaks sticky
+- **Leads**: `LeadTable` also has a nested `overflow-auto` div wrapping the table
+- **Accounts**: Background is only `bg-muted/50` (semi-transparent), letting content show through
+- **Action Items**: Background is only `bg-muted/50`, same transparency issue
 
-The card currently always has `hover:shadow-lg hover:-translate-y-0.5` and the expanded state adds `shadow-xl`. These cause visual size changes on hover and expansion.
+## Changes
 
-**Changes:**
-- Line 83: Make hover effects conditional -- only apply `hover:shadow-lg hover:-translate-y-0.5` when NOT expanded
-- Line 89: Change expanded styling from `shadow-xl` to `shadow-md`
+### 1. ContactTableBody (`src/components/contact-table/ContactTableBody.tsx`)
+- Line 245: Remove `overflow-auto` from the wrapper `<div>` so the parent in `ContactTable` is the sole scroll container
+- Lines 247-249, 261, 283: Update all header backgrounds from `bg-muted/50` to `bg-muted/80` and change `z-10` to `z-20`, add `backdrop-blur-sm`
 
-The className logic becomes:
-- Base: `deal-card group cursor-pointer transition-all duration-300 border-l-3 border-border/40`
-- Add `hover:shadow-lg hover:-translate-y-0.5` only when `!isExpanded`
-- Expanded: `ring-2 ring-primary shadow-md border-primary z-10` (no shadow-xl, no hover transforms)
+### 2. AccountTableBody (`src/components/account-table/AccountTableBody.tsx`)
+- Line 213: Update TableHeader from `z-10 bg-muted/50` to `z-20 bg-muted/80 backdrop-blur-sm`
+- Lines 215, 223, 248: Update all TableHead cells from `bg-muted/50` to `bg-muted/80`
 
-## 2. Replace Expand Icon with Info Icon
+### 3. LeadTable (`src/components/LeadTable.tsx`)
+- Line 342: Remove `overflow-auto` from the inner wrapper div so the parent `overflow-auto` div (line 341) is the sole scroll container
+- Line 344: Update TableHeader from `z-10` to `z-20`, add `bg-muted/80 backdrop-blur-sm`
+- Lines 346, 358, 377: Update all TableHead cells from `bg-muted/50` to `bg-muted/80`
 
-**File:** `src/components/DealCard.tsx`
-
-- Line 6: Replace `PanelRightOpen` import with `Info` from lucide-react
-- Line 214: Change title from `"Expand details"` to `"View details"`
-- Line 216: Replace `<PanelRightOpen>` with `<Info>`
-
-## 3. Smooth Scroll-Back on Collapse
-
-**File:** `src/components/KanbanBoard.tsx` (lines 96-113)
-
-Currently on collapse completion, the scroll position is restored instantly via `scrollTop`/`scrollLeft` assignment. This causes a jarring jump.
-
-**Changes:**
-- Replace the direct scroll position assignment (lines 101-103) with `scrollTo({ ..., behavior: 'smooth' })` so the view glides back to the original card position instead of jumping
-
-**File:** `src/index.css` (lines 480-489)
-
-Update the `inlineDetailsOut` keyframe to add a subtle scale-down for a more polished collapse feel:
-- Change `transform: translateX(20px)` in the `to` state to `transform: translateX(20px) scale(0.97)`
-
----
+### 4. ActionItemsTable (`src/components/ActionItemsTable.tsx`)
+- Line 294: Update TableHeader from `z-10` to `z-20`, add `bg-muted/80 backdrop-blur-sm`
+- Line 296: Update TableHead cells from `bg-muted/50` to `bg-muted/80`
 
 ## Technical Summary
 
 | File | Changes |
 |------|---------|
-| `src/components/DealCard.tsx` | Conditional hover effects when not expanded; `shadow-md` instead of `shadow-xl`; replace `PanelRightOpen` with `Info` icon; update tooltip |
-| `src/components/KanbanBoard.tsx` | Use `scrollTo({ behavior: 'smooth' })` on collapse completion instead of direct assignment |
-| `src/index.css` | Add `scale(0.97)` to `inlineDetailsOut` keyframe end state |
+| `src/components/contact-table/ContactTableBody.tsx` | Remove nested `overflow-auto`; upgrade header bg to `bg-muted/80 backdrop-blur-sm z-20` |
+| `src/components/account-table/AccountTableBody.tsx` | Upgrade header bg to `bg-muted/80 backdrop-blur-sm z-20` |
+| `src/components/LeadTable.tsx` | Remove nested `overflow-auto`; upgrade header bg to `bg-muted/80 backdrop-blur-sm z-20` |
+| `src/components/ActionItemsTable.tsx` | Upgrade header bg to `bg-muted/80 backdrop-blur-sm z-20` |
 
+## Result
+All four modules will match the Deals list view behavior: column headers remain visible and fixed at the top while only record rows scroll vertically.

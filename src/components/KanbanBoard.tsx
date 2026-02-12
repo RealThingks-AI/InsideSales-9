@@ -99,8 +99,11 @@ export const KanbanBoard = ({
         setExpandedDealId(null);
         // Restore scroll position after collapse
         if (scrollContainerRef.current) {
-          scrollContainerRef.current.scrollTop = savedScrollPosition.current.top;
-          scrollContainerRef.current.scrollLeft = savedScrollPosition.current.left;
+          scrollContainerRef.current.scrollTo({
+            top: savedScrollPosition.current.top,
+            left: savedScrollPosition.current.left,
+            behavior: 'smooth',
+          });
         }
         // Handle pending expand (switching deals)
         if (pendingExpandId) {

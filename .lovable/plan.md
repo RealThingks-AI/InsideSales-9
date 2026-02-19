@@ -1,90 +1,122 @@
 
-## Fix Backup Record Count Bloat & All System Section Issues
+# Complete Backup & Restore Audit — All Issues Found & Fixes
 
-### Root Cause Analysis
+## Current State Summary (from live database)
 
-The full backup jumped from 5,227 → 30,777 records because the `security_audit_log` table has **25,551 rows** — accounting for 83% of the backup. Here's why:
-
-**`src/components/SecurityProvider.tsx`** logs four event types on every session:
-- `SESSION_START` — fires every time `userRole` is set (11,167 entries)
-- `SESSION_END` — fires on component unmount (9,070 entries)
-- `SESSION_INACTIVE` — fires every time a browser tab is hidden (2,202 entries)
-- `SESSION_ACTIVE` — fires every time a browser tab becomes visible again (2,103 entries)
-
-This means every single tab switch writes two rows to the DB. With normal browsing the table fills up rapidly.
+- `security_audit_log` has **25,604 rows** and is still growing
+- Breakdown: SESSION_START (11,189), SESSION_END (9,088), SESSION_INACTIVE (2,205), SESSION_ACTIVE (2,108) — these 4 actions alone = 24,590 rows (96%)
+- The previous plan removed `security_audit_log` from backups but **the root source of noise is still writing to the DB**
 
 ---
 
-### Issues & Fixes
+## Issue 1 — SESSION_INACTIVE & SESSION_ACTIVE still being written (CRITICAL)
 
-**Issue 1 — `security_audit_log` bloating full backup (PRIMARY)**
+### Root Cause
+The current `SecurityProvider.tsx` no longer has the `handleVisibilityChange` listener (that was already removed). However, the table still has **2,205 SESSION_INACTIVE + 2,108 SESSION_ACTIVE** rows, meaning they accumulated before the fix was applied.
 
-The `create-backup` and `scheduled-backup` edge functions include `security_audit_log` in `BACKUP_TABLES`. This is audit/operational data — not business data — and it should not be part of the standard backup. Likewise `user_sessions` and `keep_alive` are ephemeral operational tables.
+These rows will never be cleaned up automatically — they stay in the table forever, bloating any future restores that include the `security_audit_log` table.
 
-**Fix:** Remove `security_audit_log`, `user_sessions`, and `keep_alive` from `BACKUP_TABLES` in both edge functions.
+**Fix:** Run a one-time SQL cleanup to delete the noise rows from `security_audit_log`.
 
-**File:** `supabase/functions/create-backup/index.ts`
-**File:** `supabase/functions/scheduled-backup/index.ts`
+**SQL to execute:**
+```sql
+DELETE FROM security_audit_log 
+WHERE action IN ('SESSION_INACTIVE', 'SESSION_ACTIVE', 'SESSION_HEARTBEAT', 'WINDOW_BLUR', 'WINDOW_FOCUS', 'USER_ACTIVITY', 'SELECT', 'SENSITIVE_DATA_ACCESS', 'PAGE_NAVIGATION');
+```
 
----
-
-**Issue 2 — `SecurityProvider` creates excessive SESSION_INACTIVE / SESSION_ACTIVE noise**
-
-Every browser tab switch generates two DB writes. The `SESSION_INACTIVE` and `SESSION_ACTIVE` events are already in the `EXCLUDED_ACTIONS` list in `auditLogUtils.ts` (hidden from Audit Logs UI), but they still write to the DB and bloat the `security_audit_log` table.
-
-**Fix:** Remove `SESSION_INACTIVE` and `SESSION_ACTIVE` logging from `SecurityProvider`. Keep `SESSION_START` and `SESSION_END` since those are meaningful security events showing logins/logouts.
-
-**File:** `src/components/SecurityProvider.tsx` — Remove the `handleVisibilityChange` listener and its two `logSecurityEvent` calls.
+This removes ~24,900 rows of pure noise, bringing the table back to meaningful audit events only.
 
 ---
 
-**Issue 3 — "leads" backups still appear in Backup History**
+## Issue 2 — SESSION_END fires on every React re-render (HIGH)
 
-The `getBackupLabel` function in `BackupRestoreSettings.tsx` looks up `backup.module_name` in the `MODULES` array. Since `leads` was removed from `MODULES`, it falls through to the raw `backup.module_name` value ("leads") and displays it as-is. This means old leads backups in the history now show the raw string "leads" instead of a friendly label.
+### Root Cause
+In `src/components/SecurityProvider.tsx` (line 96–98), the `useEffect` cleanup function calls `logSecurityEvent('SESSION_END', ...)` every time the component re-renders:
 
-**Fix:** Update `getBackupLabel` to handle the legacy `leads` module gracefully — display it as "Leads (Legacy)" or map it through a fallback label lookup that includes `leads`.
+```tsx
+return () => {
+  logSecurityEvent('SESSION_END', 'auth', user.id);  // ← fires on EVERY re-render
+};
+```
 
-**File:** `src/components/settings/BackupRestoreSettings.tsx`
+React cleanup functions run **every time dependencies change** — not just on unmount. Since `[user, userRole, logSecurityEvent]` changes when `userRole` updates (which happens on load), this fires multiple times per page load, generating duplicate SESSION_END entries.
 
----
+**Fix:** Use a ref-based flag to ensure SESSION_END only logs once per actual sign-out (when user becomes `null`), not on every re-render cleanup.
 
-**Issue 4 — Edge functions still have `leads` in MODULE_TABLES**
+**File:** `src/components/SecurityProvider.tsx`
 
-Both `create-backup` and `scheduled-backup` still define `leads: ['leads', 'lead_action_items']` in `MODULE_TABLES`. This means if someone somehow triggers a leads module backup (e.g., directly via API), it still works as a standalone module. Since leads is now part of deals at the UI level, the edge functions' `MODULE_TABLES` should be updated so the deals module backup also includes the leads-related tables for completeness.
-
-**Fix:**
-- Remove `leads` key from `MODULE_TABLES` in both edge functions
-- Add `leads` and `lead_action_items` to the `deals` module backup tables so historical leads data is captured when backing up Deals
-
-**File:** `supabase/functions/create-backup/index.ts`
-**File:** `supabase/functions/scheduled-backup/index.ts`
+Change the cleanup to only log SESSION_END when the user is actually signing out (user goes from truthy → null), not on every re-render. Use a `useRef` to track whether we're in an actual unmount vs. a dependency re-run.
 
 ---
 
-**Issue 5 — Full backup still includes `leads` table (correct to keep)**
+## Issue 3 — SENSITIVE_DATA_ACCESS logged on every page load (HIGH)
 
-The `leads` table still exists in the database and contains real data (14 records). The full backup SHOULD include the `leads` table for data safety. This is correct behavior — keep it in `BACKUP_TABLES`. Only the UI module card and module-scoped backup for "leads" as a standalone module should be removed.
+### Root Cause
+`src/hooks/useSecureDataAccess.tsx` (lines 32–37) logs `SENSITIVE_DATA_ACCESS` to `security_audit_log` **every time** deals or contacts data is fetched. Since `useSecureDeals` and `useSecureContacts` load data on mount, this fires 2 rows per page navigation to Deals or Contacts.
+
+Additionally, `logDataAccess` (line 18) logs a `SELECT` row for every query too. So each page load generates **2 audit rows** (one SELECT + one SENSITIVE_DATA_ACCESS).
+
+These actions are already in the `EXCLUDED_ACTIONS` list in `auditLogUtils.ts` (they're hidden from the Audit Log UI) — so they have **no value**, only cost.
+
+**Fix:** Remove the `logDataAccess` call and the `SENSITIVE_DATA_ACCESS` log block from `useSecureDataAccess.tsx`. Keep error-logging for failed/unauthorized access since that IS meaningful.
+
+**File:** `src/hooks/useSecureDataAccess.tsx`
 
 ---
 
-### Summary of Files to Change
+## Issue 4 — Restore function still lists `security_audit_log`, `user_sessions`, `keep_alive` in DELETE_ORDER & INSERT_ORDER (MEDIUM)
 
-| File | Change |
-|---|---|
-| `supabase/functions/create-backup/index.ts` | Remove `security_audit_log`, `user_sessions`, `keep_alive` from `BACKUP_TABLES`; remove `leads` from `MODULE_TABLES`; add `leads`/`lead_action_items` to deals module tables |
-| `supabase/functions/scheduled-backup/index.ts` | Same changes as create-backup |
-| `src/components/SecurityProvider.tsx` | Remove `SESSION_INACTIVE` and `SESSION_ACTIVE` event listeners; keep `SESSION_START` and `SESSION_END` |
-| `src/components/settings/BackupRestoreSettings.tsx` | Fix `getBackupLabel` to handle legacy `leads` module name gracefully |
+### Root Cause
+`supabase/functions/restore-backup/index.ts` lines 9–28 still include:
+- `user_sessions` in DELETE_ORDER (line 12) and INSERT_ORDER (line 25)
+- `security_audit_log` in DELETE_ORDER (line 13) and INSERT_ORDER (line 27)
+- `keep_alive` in DELETE_ORDER (line 16) and INSERT_ORDER (line 27)
 
-### Files NOT changed (by design)
+This means if an **old backup** (pre-fix) is restored — e.g., the 30,777-record backup from 18:54 — the restore will:
+1. **Delete all current sessions** (logging everyone out mid-restore)
+2. **Restore 25,000+ audit noise rows** back into the database
+3. **Delete and restore the keep_alive table** unnecessarily
 
-- `supabase/functions/restore-backup/index.ts` — The restore function correctly excludes `security_audit_log` from DELETE_ORDER and INSERT_ORDER (it already handles this properly for tables present in the backup file only)
-- `src/components/settings/audit/auditLogUtils.ts` — `SESSION_INACTIVE`/`SESSION_ACTIVE` already correctly excluded from UI display
-- `src/components/settings/AuditLogsSettings.tsx` — Audit log viewer is correct; the problem is data volume not display logic
+**Fix:** Remove `security_audit_log`, `user_sessions`, and `keep_alive` from both `DELETE_ORDER` and `INSERT_ORDER` in `restore-backup/index.ts`.
 
-### Expected Impact After Fix
+**File:** `supabase/functions/restore-backup/index.ts`
 
-- Future full backups will exclude ~25,000+ audit log rows, bringing record counts back to ~5,200 range
-- `security_audit_log` will no longer grow at ~100+ rows/day from session noise
-- Backup History will display legacy leads backups with a readable label instead of raw "leads"
-- Deals module backup will now include historical leads data
+---
+
+## Issue 5 — Backup History table header is not sticky (MINOR UI)
+
+### Root Cause
+The Backup History table inside `BackupRestoreSettings.tsx` (lines 535–595) uses a `<ScrollArea>` with a `<Table>` inside it. The `<TableHeader>` has no `sticky top-0` class, so when users scroll through 30 backup entries, the column headers (Type, Date, Status, Records, Size, Actions) scroll away.
+
+**Fix:** Add `sticky top-0 z-10 bg-background` to the `<TableHeader>` in BackupRestoreSettings to match the sticky-header pattern applied to all other modules.
+
+**File:** `src/components/settings/BackupRestoreSettings.tsx` (line 537)
+
+---
+
+## Issue 6 — Module count on backup card counts `action_items` but label says "Tasks" (MINOR)
+
+### Root Cause
+In `BackupRestoreSettings.tsx` line 173, `fetchModuleCounts` queries the `action_items` table. The `MODULES` array (line 60) maps `id: 'action_items'` to `name: 'Tasks'`. This mapping is correct, BUT the Module Backup card (line 504) displays `moduleCounts[module.id]` where `module.id` is `'action_items'`. This works fine.
+
+**No fix needed** — this is consistent.
+
+---
+
+## Summary of Changes
+
+| # | File | Change | Priority |
+|---|------|---------|----------|
+| 1 | SQL (run once in Supabase dashboard) | Delete SESSION_INACTIVE, SESSION_ACTIVE, SELECT, SENSITIVE_DATA_ACCESS noise rows | CRITICAL |
+| 2 | `src/components/SecurityProvider.tsx` | Fix SESSION_END to only fire on actual sign-out, not re-renders | HIGH |
+| 3 | `src/hooks/useSecureDataAccess.tsx` | Remove logDataAccess and SENSITIVE_DATA_ACCESS logging from secureQuery | HIGH |
+| 4 | `supabase/functions/restore-backup/index.ts` | Remove `security_audit_log`, `user_sessions`, `keep_alive` from DELETE_ORDER and INSERT_ORDER | MEDIUM |
+| 5 | `src/components/settings/BackupRestoreSettings.tsx` | Add sticky header to Backup History table | MINOR |
+
+## Expected Outcome
+
+- `security_audit_log` reduced from 25,604 → ~700 meaningful rows (real CRUDs, imports, permission-denied events)
+- Daily growth stops being driven by page loads and tab switches
+- Restoring any backup (including old ones) will no longer wipe active sessions or restore audit noise
+- Backup record counts accurately reflect business data only
+- Backup History headers stay visible when scrolling through 30 entries

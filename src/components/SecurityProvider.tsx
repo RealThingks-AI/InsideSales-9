@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useSecurityAudit } from '@/hooks/useSecurityAudit';
 import { supabase } from '@/integrations/supabase/client';
@@ -74,12 +74,22 @@ export const SecurityProvider = ({ children }: SecurityProviderProps) => {
 
   // Ref to prevent duplicate session logging per user+role combination
   const sessionLoggedRef = React.useRef<string | null>(null);
+  // Ref to track the previous user id so we can log SESSION_END only on actual sign-out
+  const prevUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!user || !userRole) {
+      // User just signed out — log SESSION_END once
+      if (prevUserIdRef.current) {
+        logSecurityEvent('SESSION_END', 'auth', prevUserIdRef.current);
+        prevUserIdRef.current = null;
+      }
       sessionLoggedRef.current = null;
       return;
     }
+
+    // Track current user id for sign-out detection
+    prevUserIdRef.current = user.id;
 
     // Only log SESSION_START once per unique user+role session
     const sessionKey = `${user.id}-${userRole}`;
@@ -92,10 +102,6 @@ export const SecurityProvider = ({ children }: SecurityProviderProps) => {
         user_email: user.email
       });
     }
-
-    return () => {
-      logSecurityEvent('SESSION_END', 'auth', user.id);
-    };
   }, [user, userRole, logSecurityEvent]);
 
   const value = {

@@ -534,7 +534,7 @@ const BackupRestoreSettings = () => {
             ) : (
               <ScrollArea className="h-[400px]">
                 <Table>
-                  <TableHeader>
+                  <TableHeader className="sticky top-0 z-10 bg-background">
                     <TableRow>
                       <TableHead className="text-xs w-[140px]">Type</TableHead>
                       <TableHead className="text-xs w-[150px]">Date</TableHead>

@@ -30,7 +30,7 @@ export const ContactSearchableDropdown = ({
   value,
   onValueChange,
   onContactSelect,
-  placeholder = "Select contact...",
+  placeholder = "Search by name or company...",
   className
 }: ContactSearchableDropdownProps) => {
   const [open, setOpen] = useState(false);
@@ -85,7 +85,7 @@ export const ContactSearchableDropdown = ({
     );
   }, [contacts, searchValue]);
 
-  const filteredContacts = useMemo(() => allFiltered.slice(0, 50), [allFiltered]);
+  const filteredContacts = useMemo(() => allFiltered.slice(0, 100), [allFiltered]);
 
   const selectedContact = contacts.find(c => c.contact_name === value);
 
@@ -163,9 +163,9 @@ export const ContactSearchableDropdown = ({
                     </CommandItem>
                   ))}
                 </CommandGroup>
-                {allFiltered.length > 50 && (
+                {allFiltered.length > 100 && (
                   <div className="py-2 px-3 text-xs text-muted-foreground text-center border-t">
-                    Showing 50 of {allFiltered.length} contacts — type to narrow results
+                    Showing 100 of {allFiltered.length} contacts — type to narrow results
                   </div>
                 )}
               </>

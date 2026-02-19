@@ -9,21 +9,50 @@ const BACKUP_TABLES = [
   'leads', 'contacts', 'accounts', 'deals', 'action_items',
   'deal_action_items', 'lead_action_items', 'notifications',
   'notification_preferences', 'page_permissions', 'profiles',
-  'user_preferences', 'user_roles', 'user_sessions',
+  'user_preferences', 'user_roles',
   'saved_filters', 'column_preferences', 'dashboard_preferences',
-  'yearly_revenue_targets', 'keep_alive'
+  'yearly_revenue_targets',
 ]
 
 const MODULE_TABLES: Record<string, string[]> = {
-  leads: ['leads', 'lead_action_items'],
   contacts: ['contacts'],
   accounts: ['accounts'],
-  deals: ['deals', 'deal_action_items'],
+  deals: ['deals', 'deal_action_items', 'leads', 'lead_action_items'],
   action_items: ['action_items'],
   notifications: ['notifications', 'notification_preferences'],
 }
 
 const MAX_BACKUPS = 30
+const BATCH_SIZE = 1000
+
+// Fetch all rows from a table using pagination to avoid the 1000-row limit
+async function fetchAllRows(client: any, table: string): Promise<any[]> {
+  const allData: any[] = []
+  let from = 0
+
+  while (true) {
+    const { data, error } = await client
+      .from(table)
+      .select('*')
+      .range(from, from + BATCH_SIZE - 1)
+
+    if (error) {
+      console.error(`Error fetching ${table} at offset ${from}:`, error)
+      break
+    }
+
+    if (!data || data.length === 0) break
+
+    allData.push(...data)
+
+    // If we got fewer than BATCH_SIZE, we've reached the end
+    if (data.length < BATCH_SIZE) break
+
+    from += BATCH_SIZE
+  }
+
+  return allData
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -98,24 +127,17 @@ Deno.serve(async (req) => {
 
     if (insertError) throw insertError
 
-    // Export data from each table
+    // Export data from each table with pagination
     const backupData: Record<string, any[]> = {}
     const manifest: Record<string, number> = {}
     let totalRecords = 0
 
     for (const table of tablesToBackup) {
-      const { data, error } = await adminClient
-        .from(table)
-        .select('*')
-
-      if (error) {
-        console.error(`Error exporting ${table}:`, error)
-        continue
-      }
-
-      backupData[table] = data || []
-      manifest[table] = data?.length || 0
-      totalRecords += data?.length || 0
+      const data = await fetchAllRows(adminClient, table)
+      backupData[table] = data
+      manifest[table] = data.length
+      totalRecords += data.length
+      console.log(`Backed up ${table}: ${data.length} records`)
     }
 
     const backupJson = JSON.stringify({
@@ -153,7 +175,7 @@ Deno.serve(async (req) => {
       manifest,
     }).eq('id', backupRecord.id)
 
-    // Enforce max backups limit - delete oldest if over 30
+    // Enforce max backups limit
     const { data: allBackups } = await adminClient
       .from('backups')
       .select('id, file_path')

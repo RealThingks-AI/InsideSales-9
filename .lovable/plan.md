@@ -1,122 +1,106 @@
 
-# Complete Backup & Restore Audit — All Issues Found & Fixes
+# Contact Search & Deal Linking — Full Audit & Fix Plan
 
-## Current State Summary (from live database)
+## Root Cause Analysis
 
-- `security_audit_log` has **25,604 rows** and is still growing
-- Breakdown: SESSION_START (11,189), SESSION_END (9,088), SESSION_INACTIVE (2,205), SESSION_ACTIVE (2,108) — these 4 actions alone = 24,590 rows (96%)
-- The previous plan removed `security_audit_log` from backups but **the root source of noise is still writing to the DB**
+The image shows searching "Marelli" in the Contact Name dropdown of a deal. It finds contacts because the `ContactSearchableDropdown` searches `company_name` too — which is correct. But there are two separate problems to fix:
 
 ---
 
-## Issue 1 — SESSION_INACTIVE & SESSION_ACTIVE still being written (CRITICAL)
+## Problem 1 — The `ContactSearchableDropdown` search only shows 50 results max and searches by contact_name/company_name, but some deals have `lead_name` set to a **company name** (not a person's name)
 
-### Root Cause
-The current `SecurityProvider.tsx` no longer has the `handleVisibilityChange` listener (that was already removed). However, the table still has **2,205 SESSION_INACTIVE + 2,108 SESSION_ACTIVE** rows, meaning they accumulated before the fix was applied.
+From the database audit:
 
-These rows will never be cleaned up automatically — they stay in the table forever, bloating any future restores that include the `security_audit_log` table.
+| Deal `lead_name` | Issue |
+|-----------------|-------|
+| `Marelli` | Company name stored as contact name — a placeholder contact `Marelli` exists in contacts table with `position: "-"` (dummy record) |
+| `Antolin`, `Aptiv`, `Daichi`, `Hanon`, `Kostal`, `LG Virtualization`, `Preh`, `Vestel` | Same — company names stored as contact names, dummy contacts exist |
+| `A` | Garbage placeholder contact |
+| `Tobias Gruendl` | Misspelling — correct contact is `Tobias Gründl` (exists in contacts) |
+| `Ritesh Metha` | Misspelling — correct contact is `Ritesh Mehta` (exists in contacts) |
 
-**Fix:** Run a one-time SQL cleanup to delete the noise rows from `security_audit_log`.
+## Problem 2 — 7 `lead_name` values have NO matching contact at all
 
-**SQL to execute:**
+These 7 people appear in deals but have **no contact record**:
+| Deal `lead_name` | Deal `customer_name` | Action |
+|-----------------|---------------------|--------|
+| `Jagdish Mishra` | REFU Drive | Create new contact |
+| `Jonatan Rydberg` | Coretura | Create new contact |
+| `Leif Frendin` | Volvo AB | Create new contact |
+| `Pradip Mukherjee` | CARIAD US | Create new contact |
+| `Simon Burghard` | Eberspächer | Create new contact |
+| `Tobias Gruendl` | Lamborghini | Fix: update deal `lead_name` to `Tobias Gründl` (contact already exists) |
+| `Ritesh Metha` | Harley Davidson | Fix: update deal `lead_name` to `Ritesh Mehta` (contact already exists) |
+
+## Problem 3 — The `ContactSearchableDropdown` search only shows 50 results
+
+When a user types "Marelli", it filters all contacts by company_name, but there are many Marelli contacts and the first 50 shown may not include all of them. The "Showing 50 of X" message is there but the user cannot see beyond those 50 without typing more.
+
+This is acceptable UX (the user needs to type more to narrow), but the search must also include `company_name` — which it already does. So the search itself is correct.
+
+The real UX issue is that the **dropdown is populated by the `lead_name` field**, which sometimes holds a company name (like "Marelli") instead of a person's name. When `lead_name = "Marelli"`, the dropdown button shows "Marelli" (which is not a valid contact name), and searching finds contacts **by company_name** which works partially.
+
+---
+
+## Fixes
+
+### Fix 1 — SQL: Create missing contacts for the 7 unmatched lead_names
+
+Run SQL to insert 5 new contact records (the 2 misspellings are fixed separately):
+
 ```sql
-DELETE FROM security_audit_log 
-WHERE action IN ('SESSION_INACTIVE', 'SESSION_ACTIVE', 'SESSION_HEARTBEAT', 'WINDOW_BLUR', 'WINDOW_FOCUS', 'USER_ACTIVITY', 'SELECT', 'SENSITIVE_DATA_ACCESS', 'PAGE_NAVIGATION');
+-- 1. Jagdish Mishra (REFU Drive)
+INSERT INTO contacts (contact_name, company_name, created_by)
+SELECT 'Jagdish Mishra', 'REFU Drive', created_by FROM deals WHERE lead_name = 'Jagdish Mishra' LIMIT 1;
+
+-- 2. Jonatan Rydberg (Coretura)
+INSERT INTO contacts (contact_name, company_name, created_by)
+SELECT 'Jonatan Rydberg', 'Coretura', created_by FROM deals WHERE lead_name = 'Jonatan Rydberg' LIMIT 1;
+
+-- 3. Leif Frendin (Volvo AB)
+INSERT INTO contacts (contact_name, company_name, created_by)
+SELECT 'Leif Frendin', 'Volvo AB', created_by FROM deals WHERE lead_name = 'Leif Frendin' LIMIT 1;
+
+-- 4. Pradip Mukherjee (CARIAD US)
+INSERT INTO contacts (contact_name, company_name, created_by)
+SELECT 'Pradip Mukherjee', 'CARIAD US', created_by FROM deals WHERE lead_name = 'Pradip Mukherjee' LIMIT 1;
+
+-- 5. Simon Burghard (Eberspächer)
+INSERT INTO contacts (contact_name, company_name, created_by)
+SELECT 'Simon Burghard', 'Eberspächer', created_by FROM deals WHERE lead_name = 'Simon Burghard' LIMIT 1;
 ```
 
-This removes ~24,900 rows of pure noise, bringing the table back to meaningful audit events only.
+### Fix 2 — SQL: Fix misspelled lead_names in deals to match existing contacts
 
----
+```sql
+-- Fix "Tobias Gruendl" → "Tobias Gründl" (contact already exists)
+UPDATE deals SET lead_name = 'Tobias Gründl' WHERE lead_name = 'Tobias Gruendl';
 
-## Issue 2 — SESSION_END fires on every React re-render (HIGH)
-
-### Root Cause
-In `src/components/SecurityProvider.tsx` (line 96–98), the `useEffect` cleanup function calls `logSecurityEvent('SESSION_END', ...)` every time the component re-renders:
-
-```tsx
-return () => {
-  logSecurityEvent('SESSION_END', 'auth', user.id);  // ← fires on EVERY re-render
-};
+-- Fix "Ritesh Metha" → "Ritesh Mehta" (contact already exists)
+UPDATE deals SET lead_name = 'Ritesh Mehta' WHERE lead_name = 'Ritesh Metha';
 ```
 
-React cleanup functions run **every time dependencies change** — not just on unmount. Since `[user, userRole, logSecurityEvent]` changes when `userRole` updates (which happens on load), this fires multiple times per page load, generating duplicate SESSION_END entries.
+### Fix 3 — Code: Improve ContactSearchableDropdown search to show count hint and search by company_name more prominently
 
-**Fix:** Use a ref-based flag to ensure SESSION_END only logs once per actual sign-out (when user becomes `null`), not on every re-render cleanup.
+**File:** `src/components/ContactSearchableDropdown.tsx`
 
-**File:** `src/components/SecurityProvider.tsx`
+The current search filters by `contact_name`, `company_name`, `email`, and `position` — this is correct. However when a user types a company name like "Marelli" and sees results, they may not realize that the `lead_name` stored in the deal is just the company name.
 
-Change the cleanup to only log SESSION_END when the user is actually signing out (user goes from truthy → null), not on every re-render. Use a `useRef` to track whether we're in an actual unmount vs. a dependency re-run.
+The fix is to ensure the dropdown **matches on company name** even if no contact_name contains "Marelli". This already works. The remaining UX fix:
+- Increase the displayed results limit from 50 → 100 for company-based searches so all Marelli contacts are visible at once
+- Add a subtle note in the placeholder "Search by name or company..."
 
----
+### Fix 4 — Code: Update ContactSearchableDropdown to also search by `phone_no` field removal and increase limit
 
-## Issue 3 — SENSITIVE_DATA_ACCESS logged on every page load (HIGH)
-
-### Root Cause
-`src/hooks/useSecureDataAccess.tsx` (lines 32–37) logs `SENSITIVE_DATA_ACCESS` to `security_audit_log` **every time** deals or contacts data is fetched. Since `useSecureDeals` and `useSecureContacts` load data on mount, this fires 2 rows per page navigation to Deals or Contacts.
-
-Additionally, `logDataAccess` (line 18) logs a `SELECT` row for every query too. So each page load generates **2 audit rows** (one SELECT + one SENSITIVE_DATA_ACCESS).
-
-These actions are already in the `EXCLUDED_ACTIONS` list in `auditLogUtils.ts` (they're hidden from the Audit Log UI) — so they have **no value**, only cost.
-
-**Fix:** Remove the `logDataAccess` call and the `SENSITIVE_DATA_ACCESS` log block from `useSecureDataAccess.tsx`. Keep error-logging for failed/unauthorized access since that IS meaningful.
-
-**File:** `src/hooks/useSecureDataAccess.tsx`
+**File:** `src/components/ContactSearchableDropdown.tsx` — change the `filteredContacts` slice from 50 → 100.
 
 ---
 
-## Issue 4 — Restore function still lists `security_audit_log`, `user_sessions`, `keep_alive` in DELETE_ORDER & INSERT_ORDER (MEDIUM)
+## Summary of All Changes
 
-### Root Cause
-`supabase/functions/restore-backup/index.ts` lines 9–28 still include:
-- `user_sessions` in DELETE_ORDER (line 12) and INSERT_ORDER (line 25)
-- `security_audit_log` in DELETE_ORDER (line 13) and INSERT_ORDER (line 27)
-- `keep_alive` in DELETE_ORDER (line 16) and INSERT_ORDER (line 27)
-
-This means if an **old backup** (pre-fix) is restored — e.g., the 30,777-record backup from 18:54 — the restore will:
-1. **Delete all current sessions** (logging everyone out mid-restore)
-2. **Restore 25,000+ audit noise rows** back into the database
-3. **Delete and restore the keep_alive table** unnecessarily
-
-**Fix:** Remove `security_audit_log`, `user_sessions`, and `keep_alive` from both `DELETE_ORDER` and `INSERT_ORDER` in `restore-backup/index.ts`.
-
-**File:** `supabase/functions/restore-backup/index.ts`
-
----
-
-## Issue 5 — Backup History table header is not sticky (MINOR UI)
-
-### Root Cause
-The Backup History table inside `BackupRestoreSettings.tsx` (lines 535–595) uses a `<ScrollArea>` with a `<Table>` inside it. The `<TableHeader>` has no `sticky top-0` class, so when users scroll through 30 backup entries, the column headers (Type, Date, Status, Records, Size, Actions) scroll away.
-
-**Fix:** Add `sticky top-0 z-10 bg-background` to the `<TableHeader>` in BackupRestoreSettings to match the sticky-header pattern applied to all other modules.
-
-**File:** `src/components/settings/BackupRestoreSettings.tsx` (line 537)
-
----
-
-## Issue 6 — Module count on backup card counts `action_items` but label says "Tasks" (MINOR)
-
-### Root Cause
-In `BackupRestoreSettings.tsx` line 173, `fetchModuleCounts` queries the `action_items` table. The `MODULES` array (line 60) maps `id: 'action_items'` to `name: 'Tasks'`. This mapping is correct, BUT the Module Backup card (line 504) displays `moduleCounts[module.id]` where `module.id` is `'action_items'`. This works fine.
-
-**No fix needed** — this is consistent.
-
----
-
-## Summary of Changes
-
-| # | File | Change | Priority |
-|---|------|---------|----------|
-| 1 | SQL (run once in Supabase dashboard) | Delete SESSION_INACTIVE, SESSION_ACTIVE, SELECT, SENSITIVE_DATA_ACCESS noise rows | CRITICAL |
-| 2 | `src/components/SecurityProvider.tsx` | Fix SESSION_END to only fire on actual sign-out, not re-renders | HIGH |
-| 3 | `src/hooks/useSecureDataAccess.tsx` | Remove logDataAccess and SENSITIVE_DATA_ACCESS logging from secureQuery | HIGH |
-| 4 | `supabase/functions/restore-backup/index.ts` | Remove `security_audit_log`, `user_sessions`, `keep_alive` from DELETE_ORDER and INSERT_ORDER | MEDIUM |
-| 5 | `src/components/settings/BackupRestoreSettings.tsx` | Add sticky header to Backup History table | MINOR |
-
-## Expected Outcome
-
-- `security_audit_log` reduced from 25,604 → ~700 meaningful rows (real CRUDs, imports, permission-denied events)
-- Daily growth stops being driven by page loads and tab switches
-- Restoring any backup (including old ones) will no longer wipe active sessions or restore audit noise
-- Backup record counts accurately reflect business data only
-- Backup History headers stay visible when scrolling through 30 entries
+| # | Type | Change | Files |
+|---|------|--------|-------|
+| 1 | SQL (via Supabase insert tool) | Create 5 missing contacts (Jagdish Mishra, Jonatan Rydberg, Leif Frendin, Pradip Mukherjee, Simon Burghard) | Database |
+| 2 | SQL (via Supabase insert tool) | Fix 2 misspelled lead_names in deals (Tobias Gruendl→Gründl, Ritesh Metha→Mehta) | Database |
+| 3 | Code | Increase contact dropdown display limit from 50 → 100 results | `src/components/ContactSearchableDropdown.tsx` |
+| 4 | Code | Update placeholder text to "Search by name or company..." | `src/components/ContactSearchableDropdown.tsx` |

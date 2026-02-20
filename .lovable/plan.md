@@ -1,106 +1,165 @@
 
-# Contact Search & Deal Linking — Full Audit & Fix Plan
 
-## Root Cause Analysis
+## Comprehensive Backup, Restore & Audit Log Fix
 
-The image shows searching "Marelli" in the Contact Name dropdown of a deal. It finds contacts because the `ContactSearchableDropdown` searches `company_name` too — which is correct. But there are two separate problems to fix:
+### Problem Summary
 
----
+The `security_audit_log` table has **26,152 rows**, with **25,135 being session noise**:
+- SESSION_START: 11,433 (fires on every re-render due to missing dedup guard)
+- SESSION_END: 9,249 (fires in useEffect cleanup on every re-render)
+- SESSION_INACTIVE: 2,275 (fires on every tab switch)
+- SESSION_ACTIVE: 2,178 (fires on every tab switch)
+- Actual useful CRUD logs: ~1,000
 
-## Problem 1 — The `ContactSearchableDropdown` search only shows 50 results max and searches by contact_name/company_name, but some deals have `lead_name` set to a **company name** (not a person's name)
-
-From the database audit:
-
-| Deal `lead_name` | Issue |
-|-----------------|-------|
-| `Marelli` | Company name stored as contact name — a placeholder contact `Marelli` exists in contacts table with `position: "-"` (dummy record) |
-| `Antolin`, `Aptiv`, `Daichi`, `Hanon`, `Kostal`, `LG Virtualization`, `Preh`, `Vestel` | Same — company names stored as contact names, dummy contacts exist |
-| `A` | Garbage placeholder contact |
-| `Tobias Gruendl` | Misspelling — correct contact is `Tobias Gründl` (exists in contacts) |
-| `Ritesh Metha` | Misspelling — correct contact is `Ritesh Mehta` (exists in contacts) |
-
-## Problem 2 — 7 `lead_name` values have NO matching contact at all
-
-These 7 people appear in deals but have **no contact record**:
-| Deal `lead_name` | Deal `customer_name` | Action |
-|-----------------|---------------------|--------|
-| `Jagdish Mishra` | REFU Drive | Create new contact |
-| `Jonatan Rydberg` | Coretura | Create new contact |
-| `Leif Frendin` | Volvo AB | Create new contact |
-| `Pradip Mukherjee` | CARIAD US | Create new contact |
-| `Simon Burghard` | Eberspächer | Create new contact |
-| `Tobias Gruendl` | Lamborghini | Fix: update deal `lead_name` to `Tobias Gründl` (contact already exists) |
-| `Ritesh Metha` | Harley Davidson | Fix: update deal `lead_name` to `Ritesh Mehta` (contact already exists) |
-
-## Problem 3 — The `ContactSearchableDropdown` search only shows 50 results
-
-When a user types "Marelli", it filters all contacts by company_name, but there are many Marelli contacts and the first 50 shown may not include all of them. The "Showing 50 of X" message is there but the user cannot see beyond those 50 without typing more.
-
-This is acceptable UX (the user needs to type more to narrow), but the search must also include `company_name` — which it already does. So the search itself is correct.
-
-The real UX issue is that the **dropdown is populated by the `lead_name` field**, which sometimes holds a company name (like "Marelli") instead of a person's name. When `lead_name = "Marelli"`, the dropdown button shows "Marelli" (which is not a valid contact name), and searching finds contacts **by company_name** which works partially.
+The backup system includes operational tables (`user_sessions`, `keep_alive`) inflating record counts, the `leads` module is listed separately despite being merged into Deals, restore logic has ID-type bugs, and the scheduled backup edge function does not exist.
 
 ---
 
-## Fixes
+### Changes by File
 
-### Fix 1 — SQL: Create missing contacts for the 7 unmatched lead_names
+#### 1. `src/components/SecurityProvider.tsx` -- Stop audit log noise
 
-Run SQL to insert 5 new contact records (the 2 misspellings are fixed separately):
+**Problem:** SESSION_START fires on every re-render (no dedup), SESSION_END fires in cleanup on every re-render, and SESSION_ACTIVE/SESSION_INACTIVE fire on every tab switch. This created 25,000+ useless rows.
 
-```sql
--- 1. Jagdish Mishra (REFU Drive)
-INSERT INTO contacts (contact_name, company_name, created_by)
-SELECT 'Jagdish Mishra', 'REFU Drive', created_by FROM deals WHERE lead_name = 'Jagdish Mishra' LIMIT 1;
+**Fix:**
+- Add a `useRef` guard so SESSION_START only fires once per user session
+- Remove the visibility change listener entirely (SESSION_ACTIVE/SESSION_INACTIVE are not actionable)
+- Remove SESSION_END from the cleanup (it fires on re-renders, not actual logouts)
+- Use the reference file pattern with `usePermissions()` for role instead of a separate fetch
 
--- 2. Jonatan Rydberg (Coretura)
-INSERT INTO contacts (contact_name, company_name, created_by)
-SELECT 'Jonatan Rydberg', 'Coretura', created_by FROM deals WHERE lead_name = 'Jonatan Rydberg' LIMIT 1;
+#### 2. `src/hooks/useSecurityAudit.tsx` -- Fix redundant auth calls
 
--- 3. Leif Frendin (Volvo AB)
-INSERT INTO contacts (contact_name, company_name, created_by)
-SELECT 'Leif Frendin', 'Volvo AB', created_by FROM deals WHERE lead_name = 'Leif Frendin' LIMIT 1;
+**Problem:** Every call to `logSecurityEvent` makes a network call to `supabase.auth.getUser()` before logging. This is wasteful since the caller already has the user context.
 
--- 4. Pradip Mukherjee (CARIAD US)
-INSERT INTO contacts (contact_name, company_name, created_by)
-SELECT 'Pradip Mukherjee', 'CARIAD US', created_by FROM deals WHERE lead_name = 'Pradip Mukherjee' LIMIT 1;
+**Fix:** Use the cached `user` from `useAuth()` hook (as the reference file does) instead of calling `supabase.auth.getUser()` on every log. Use fire-and-forget pattern (no await on the RPC call) to avoid blocking the UI.
 
--- 5. Simon Burghard (Eberspächer)
-INSERT INTO contacts (contact_name, company_name, created_by)
-SELECT 'Simon Burghard', 'Eberspächer', created_by FROM deals WHERE lead_name = 'Simon Burghard' LIMIT 1;
+#### 3. `supabase/functions/create-backup/index.ts` -- Fix backup scope
+
+**Problem:**
+- `BACKUP_TABLES` includes `user_sessions` and `keep_alive` (operational/ephemeral)
+- `MODULE_TABLES.deals` does not include `leads` and `lead_action_items` (Leads merged into Deals)
+- No `notifications` standalone module entry
+
+**Fix:**
+- Remove `user_sessions` and `keep_alive` from `BACKUP_TABLES`
+- Update `MODULE_TABLES`:
+
+```text
+contacts: ['contacts']
+accounts: ['accounts']
+deals: ['deals', 'deal_action_items', 'leads', 'lead_action_items']
+action_items: ['action_items']
+notifications: ['notifications', 'notification_preferences']
 ```
 
-### Fix 2 — SQL: Fix misspelled lead_names in deals to match existing contacts
+#### 4. `supabase/functions/restore-backup/index.ts` -- Fix restore logic
 
-```sql
--- Fix "Tobias Gruendl" → "Tobias Gründl" (contact already exists)
-UPDATE deals SET lead_name = 'Tobias Gründl' WHERE lead_name = 'Tobias Gruendl';
+**Problem:**
+- Delete query uses `.neq('id', '00000000-0000-0000-0000-000000000000')` which crashes for tables with non-UUID IDs (e.g., `keep_alive` uses bigint)
+- `profiles` and `user_roles` are missing from `DELETE_ORDER` and `INSERT_ORDER` but are in `BACKUP_TABLES`
+- `user_sessions` and `keep_alive` still in the order lists
 
--- Fix "Ritesh Metha" → "Ritesh Mehta" (contact already exists)
-UPDATE deals SET lead_name = 'Ritesh Mehta' WHERE lead_name = 'Ritesh Metha';
+**Fix:**
+- Change delete approach to `.delete().not('id', 'is', null)` (works for any column type)
+- Add `profiles` and `user_roles` to correct positions
+- Remove `user_sessions` and `keep_alive` from order lists
+
+Updated orders:
+
+```text
+DELETE_ORDER:
+  deal_action_items, lead_action_items, action_items,
+  notifications, notification_preferences, saved_filters,
+  column_preferences, dashboard_preferences,
+  deals, contacts, leads, accounts,
+  user_preferences, yearly_revenue_targets, page_permissions,
+  user_roles, profiles
+
+INSERT_ORDER:
+  profiles, user_roles,
+  accounts, leads, contacts, deals,
+  lead_action_items, deal_action_items, action_items,
+  notifications, notification_preferences, saved_filters,
+  column_preferences, dashboard_preferences,
+  user_preferences, yearly_revenue_targets, page_permissions
 ```
 
-### Fix 3 — Code: Improve ContactSearchableDropdown search to show count hint and search by company_name more prominently
+#### 5. `supabase/functions/scheduled-backup/index.ts` -- Create new edge function
 
-**File:** `src/components/ContactSearchableDropdown.tsx`
+**Problem:** No edge function exists to execute scheduled backups. The UI saves schedule config to `backup_schedules` but nothing triggers actual backups.
 
-The current search filters by `contact_name`, `company_name`, `email`, and `position` — this is correct. However when a user types a company name like "Marelli" and sees results, they may not realize that the `lead_name` stored in the deal is just the company name.
+**Fix:** Create new function that:
+- Reads `backup_schedules` for enabled schedules where `next_run_at <= now()`
+- Uses the same `BACKUP_TABLES` and `MODULE_TABLES` as `create-backup`
+- Respects `backup_scope` (full/module) and `backup_module` columns
+- Updates `last_run_at` and computes `next_run_at` after execution
+- Enforces the 30-backup limit
 
-The fix is to ensure the dropdown **matches on company name** even if no contact_name contains "Marelli". This already works. The remaining UX fix:
-- Increase the displayed results limit from 50 → 100 for company-based searches so all Marelli contacts are visible at once
-- Add a subtle note in the placeholder "Search by name or company..."
+#### 6. `supabase/config.toml` -- Register new function
 
-### Fix 4 — Code: Update ContactSearchableDropdown to also search by `phone_no` field removal and increase limit
+Add:
+```toml
+[functions.scheduled-backup]
+verify_jwt = false
+```
 
-**File:** `src/components/ContactSearchableDropdown.tsx` — change the `filteredContacts` slice from 50 → 100.
+#### 7. `src/components/settings/BackupRestoreSettings.tsx` -- UI fixes
+
+**7a. Legacy label fix:**
+Add a fallback map for old backups with `module_name: 'leads'`:
+
+```typescript
+const LEGACY_MODULE_LABELS: Record<string, string> = {
+  leads: 'Leads (Legacy)',
+};
+```
+
+Update `getBackupLabel` to use it.
+
+**7b. Remove delete button:**
+- Remove the delete button from each backup row (lines 516-527)
+- Remove `handleDeleteClick`, `handleDeleteConfirm` functions
+- Remove delete confirmation dialog (lines 585-605)
+- Remove `deleting`, `showDeleteDialog` state
+- Remove `Trash2` from imports
+- The edge function's 30-backup limit handles cleanup automatically
+
+**7c. Increase scroll height:**
+Change `max-h-[400px]` to `max-h-[600px]` on line 466.
+
+**7d. Add backup scope selector to Scheduled Backups:**
+Add a scope dropdown (Full System / Contacts / Accounts / Deals / Action Items / Notifications) that saves to `backup_scope` and `backup_module` in `backup_schedules`. When "Full System" is selected: `backup_scope = 'full'`, `backup_module = null`. When a module is selected: `backup_scope = 'module'`, `backup_module = module_id`.
+
+**7e. Add frequency selector:**
+The schedule UI currently only shows time but not frequency. Add a frequency dropdown (Daily / Every 2 Days / Weekly).
+
+#### 8. Cron Job Setup (SQL)
+
+After the scheduled-backup edge function is deployed, set up `pg_cron` to invoke it every hour:
+
+```sql
+SELECT cron.schedule(
+  'scheduled-backup-check',
+  '0 * * * *',
+  $$
+  SELECT net.http_post(
+    url:='https://nreslricievaamrwfrlx.supabase.co/functions/v1/scheduled-backup',
+    headers:='{"Content-Type": "application/json", "Authorization": "Bearer <anon_key>"}'::jsonb,
+    body:='{}'::jsonb
+  ) as request_id;
+  $$
+);
+```
 
 ---
 
-## Summary of All Changes
+### Expected Impact
 
-| # | Type | Change | Files |
-|---|------|--------|-------|
-| 1 | SQL (via Supabase insert tool) | Create 5 missing contacts (Jagdish Mishra, Jonatan Rydberg, Leif Frendin, Pradip Mukherjee, Simon Burghard) | Database |
-| 2 | SQL (via Supabase insert tool) | Fix 2 misspelled lead_names in deals (Tobias Gruendl→Gründl, Ritesh Metha→Mehta) | Database |
-| 3 | Code | Increase contact dropdown display limit from 50 → 100 results | `src/components/ContactSearchableDropdown.tsx` |
-| 4 | Code | Update placeholder text to "Search by name or company..." | `src/components/ContactSearchableDropdown.tsx` |
+| Metric | Before | After |
+|---|---|---|
+| Audit log growth/day | ~100+ session noise rows | Only meaningful CRUD events |
+| Full backup records | ~31,000+ | ~5,200 (no audit log, no operational tables) |
+| Deals module backup | Excludes leads data | Includes leads + lead_action_items |
+| Scheduled backups | Non-functional (no edge function) | Fully working with scope selection |
+| Restore on mixed ID types | Crashes on bigint tables | Works universally |
+

@@ -1,141 +1,85 @@
 
 
-## Comprehensive Backup, Restore & Audit Log Fix
+# Complete Backup & Restore Deep Fix
 
-### Problem Summary
+## Current State (Verified from Live Database)
 
-The `security_audit_log` table has **26,152 rows**, with **25,135 being session noise**:
-- SESSION_START: 11,433 (fires on every re-render due to missing dedup guard)
-- SESSION_END: 9,249 (fires in useEffect cleanup on every re-render)
-- SESSION_INACTIVE: 2,275 (fires on every tab switch)
-- SESSION_ACTIVE: 2,178 (fires on every tab switch)
-- Actual useful CRUD logs: ~1,000
-
-The backup system includes operational tables (`user_sessions`, `keep_alive`) inflating record counts, the `leads` module is listed separately despite being merged into Deals, restore logic has ID-type bugs, and the scheduled backup edge function does not exist.
+| Metric | Value |
+|--------|-------|
+| `security_audit_log` total rows | **26,167** |
+| Noise rows (SESSION_START/END/ACTIVE/INACTIVE + others) | **25,233** (96.4%) |
+| Meaningful rows (CREATE, UPDATE, DELETE, etc.) | **934** |
+| Full backup record count (latest) | 5,232 (correct, post-fix) |
+| Old bloated backup still in history | 30,777 records (contains `security_audit_log`: 25,551, `user_sessions`: 1, `keep_alive`: 1) |
+| pg_cron extension | Enabled |
+| pg_net extension | Enabled |
+| Existing cron jobs | **None** (scheduled backups not wired up) |
+| Backup schedule configured | Yes - full, every 2 days, 06:00, enabled, next_run: Feb 21 |
 
 ---
 
-### Changes by File
+## Issue 1 -- Clean up 25,233 noise rows (SQL via insert tool)
 
-#### 1. `src/components/SecurityProvider.tsx` -- Stop audit log noise
+Run a DELETE to remove all session noise, page navigation, window focus/blur, heartbeat, SELECT, and SENSITIVE_DATA_ACCESS rows. These actions have zero operational value and are already hidden from the Audit Log UI.
 
-**Problem:** SESSION_START fires on every re-render (no dedup), SESSION_END fires in cleanup on every re-render, and SESSION_ACTIVE/SESSION_INACTIVE fire on every tab switch. This created 25,000+ useless rows.
-
-**Fix:**
-- Add a `useRef` guard so SESSION_START only fires once per user session
-- Remove the visibility change listener entirely (SESSION_ACTIVE/SESSION_INACTIVE are not actionable)
-- Remove SESSION_END from the cleanup (it fires on re-renders, not actual logouts)
-- Use the reference file pattern with `usePermissions()` for role instead of a separate fetch
-
-#### 2. `src/hooks/useSecurityAudit.tsx` -- Fix redundant auth calls
-
-**Problem:** Every call to `logSecurityEvent` makes a network call to `supabase.auth.getUser()` before logging. This is wasteful since the caller already has the user context.
-
-**Fix:** Use the cached `user` from `useAuth()` hook (as the reference file does) instead of calling `supabase.auth.getUser()` on every log. Use fire-and-forget pattern (no await on the RPC call) to avoid blocking the UI.
-
-#### 3. `supabase/functions/create-backup/index.ts` -- Fix backup scope
-
-**Problem:**
-- `BACKUP_TABLES` includes `user_sessions` and `keep_alive` (operational/ephemeral)
-- `MODULE_TABLES.deals` does not include `leads` and `lead_action_items` (Leads merged into Deals)
-- No `notifications` standalone module entry
-
-**Fix:**
-- Remove `user_sessions` and `keep_alive` from `BACKUP_TABLES`
-- Update `MODULE_TABLES`:
-
-```text
-contacts: ['contacts']
-accounts: ['accounts']
-deals: ['deals', 'deal_action_items', 'leads', 'lead_action_items']
-action_items: ['action_items']
-notifications: ['notifications', 'notification_preferences']
+```sql
+DELETE FROM security_audit_log 
+WHERE action IN (
+  'SESSION_START', 'SESSION_END', 
+  'SESSION_ACTIVE', 'SESSION_INACTIVE', 
+  'SESSION_HEARTBEAT', 
+  'WINDOW_BLUR', 'WINDOW_FOCUS', 
+  'USER_ACTIVITY', 
+  'SELECT', 'SENSITIVE_DATA_ACCESS', 
+  'PAGE_NAVIGATION'
+);
 ```
 
-#### 4. `supabase/functions/restore-backup/index.ts` -- Fix restore logic
+Expected result: ~934 meaningful rows remain (CREATE, UPDATE, DELETE, BULK_DELETE, DATA_IMPORT, DATA_EXPORT, NOTE, EMAIL, CALL, MEETING, PASSWORD_CHANGE, SESSION_TERMINATED).
 
-**Problem:**
-- Delete query uses `.neq('id', '00000000-0000-0000-0000-000000000000')` which crashes for tables with non-UUID IDs (e.g., `keep_alive` uses bigint)
-- `profiles` and `user_roles` are missing from `DELETE_ORDER` and `INSERT_ORDER` but are in `BACKUP_TABLES`
-- `user_sessions` and `keep_alive` still in the order lists
+**IMPORTANT**: This is a DELETE of noise data only. No production business data is touched.
 
-**Fix:**
-- Change delete approach to `.delete().not('id', 'is', null)` (works for any column type)
-- Add `profiles` and `user_roles` to correct positions
-- Remove `user_sessions` and `keep_alive` from order lists
+---
 
-Updated orders:
+## Issue 2 -- Remove SENSITIVE_DATA_ACCESS logging from useSecureDataAccess
 
-```text
-DELETE_ORDER:
-  deal_action_items, lead_action_items, action_items,
-  notifications, notification_preferences, saved_filters,
-  column_preferences, dashboard_preferences,
-  deals, contacts, leads, accounts,
-  user_preferences, yearly_revenue_targets, page_permissions,
-  user_roles, profiles
+**File:** `src/hooks/useSecureDataAccess.tsx`
 
-INSERT_ORDER:
-  profiles, user_roles,
-  accounts, leads, contacts, deals,
-  lead_action_items, deal_action_items, action_items,
-  notifications, notification_preferences, saved_filters,
-  column_preferences, dashboard_preferences,
-  user_preferences, yearly_revenue_targets, page_permissions
-```
+The `logDataAccess` call on line 18 with `'SELECT'` is now safely skipped (the hook has a guard). BUT lines 32-37 still log `SENSITIVE_DATA_ACCESS` on every successful fetch of deals/contacts/leads. This fires ~2 rows per page navigation to those modules. Since these are excluded from the Audit Log UI already, they serve no purpose.
 
-#### 5. `supabase/functions/scheduled-backup/index.ts` -- Create new edge function
+**Fix:** Remove lines 17-18 (`await logDataAccess(tableName, operation)`) and lines 32-37 (the `SENSITIVE_DATA_ACCESS` logging block). Keep the `DATA_ACCESS_FAILED` log (lines 23-28) since failed access IS meaningful.
 
-**Problem:** No edge function exists to execute scheduled backups. The UI saves schedule config to `backup_schedules` but nothing triggers actual backups.
+---
 
-**Fix:** Create new function that:
-- Reads `backup_schedules` for enabled schedules where `next_run_at <= now()`
-- Uses the same `BACKUP_TABLES` and `MODULE_TABLES` as `create-backup`
-- Respects `backup_scope` (full/module) and `backup_module` columns
-- Updates `last_run_at` and computes `next_run_at` after execution
-- Enforces the 30-backup limit
+## Issue 3 -- Restore function still imports noise tables from old backups (CRITICAL)
 
-#### 6. `supabase/config.toml` -- Register new function
+**File:** `supabase/functions/restore-backup/index.ts`
 
-Add:
-```toml
-[functions.scheduled-backup]
-verify_jwt = false
-```
-
-#### 7. `src/components/settings/BackupRestoreSettings.tsx` -- UI fixes
-
-**7a. Legacy label fix:**
-Add a fallback map for old backups with `module_name: 'leads'`:
+The restore function correctly removed `security_audit_log`, `user_sessions`, `keep_alive` from `DELETE_ORDER` and `INSERT_ORDER`. However, lines 203-215 contain a **catch-all loop** that restores ANY table present in the backup file that is NOT in `INSERT_ORDER`:
 
 ```typescript
-const LEGACY_MODULE_LABELS: Record<string, string> = {
-  leads: 'Leads (Legacy)',
-};
+// Also restore any tables in the backup that aren't in INSERT_ORDER
+for (const table of tablesToRestore) {
+  if (INSERT_ORDER.includes(table) || !backupData[table]?.length) continue
+  // ... upserts the data
+}
 ```
 
-Update `getBackupLabel` to use it.
+This means if someone restores the old 30,777-record backup (which contains `security_audit_log` with 25,551 rows, `user_sessions`, and `keep_alive`), those tables WILL be restored through this catch-all, defeating the entire fix.
 
-**7b. Remove delete button:**
-- Remove the delete button from each backup row (lines 516-527)
-- Remove `handleDeleteClick`, `handleDeleteConfirm` functions
-- Remove delete confirmation dialog (lines 585-605)
-- Remove `deleting`, `showDeleteDialog` state
-- Remove `Trash2` from imports
-- The edge function's 30-backup limit handles cleanup automatically
+**Fix:** Add a `SKIP_TABLES` blocklist and filter them out in both the catch-all loop AND the pre-restore safety backup:
 
-**7c. Increase scroll height:**
-Change `max-h-[400px]` to `max-h-[600px]` on line 466.
+```typescript
+const SKIP_TABLES = ['security_audit_log', 'user_sessions', 'keep_alive']
+```
 
-**7d. Add backup scope selector to Scheduled Backups:**
-Add a scope dropdown (Full System / Contacts / Accounts / Deals / Action Items / Notifications) that saves to `backup_scope` and `backup_module` in `backup_schedules`. When "Full System" is selected: `backup_scope = 'full'`, `backup_module = null`. When a module is selected: `backup_scope = 'module'`, `backup_module = module_id`.
+Then filter `tablesToRestore` at line 123 to exclude these tables, so they are never deleted, backed up, or restored.
 
-**7e. Add frequency selector:**
-The schedule UI currently only shows time but not frequency. Add a frequency dropdown (Daily / Every 2 Days / Weekly).
+---
 
-#### 8. Cron Job Setup (SQL)
+## Issue 4 -- Set up pg_cron job for scheduled backups (SQL via insert tool)
 
-After the scheduled-backup edge function is deployed, set up `pg_cron` to invoke it every hour:
+Both `pg_cron` and `pg_net` extensions are confirmed enabled. The scheduled-backup edge function is deployed. A schedule exists (full backup, every 2 days at 06:00, enabled). But NO cron job exists to trigger it.
 
 ```sql
 SELECT cron.schedule(
@@ -144,22 +88,39 @@ SELECT cron.schedule(
   $$
   SELECT net.http_post(
     url:='https://nreslricievaamrwfrlx.supabase.co/functions/v1/scheduled-backup',
-    headers:='{"Content-Type": "application/json", "Authorization": "Bearer <anon_key>"}'::jsonb,
+    headers:='{"Content-Type": "application/json", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5yZXNscmljaWV2YWFtcndmcmx4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU0Mjc3NTUsImV4cCI6MjA3MTAwMzc1NX0.xHf2lE2OGZ5jNGOBWGAsOdoyHqdwi_TxWkbKiAr1RJY"}'::jsonb,
     body:='{}'::jsonb
   ) as request_id;
   $$
 );
 ```
 
+This checks every hour if any scheduled backup is due (`next_run_at <= now()`). Since the function uses `verify_jwt = false` and validates schedules server-side, the anon key is sufficient.
+
 ---
 
-### Expected Impact
+## Issue 5 -- Test the backup flow (via edge function curl)
 
-| Metric | Before | After |
-|---|---|---|
-| Audit log growth/day | ~100+ session noise rows | Only meaningful CRUD events |
-| Full backup records | ~31,000+ | ~5,200 (no audit log, no operational tables) |
-| Deals module backup | Excludes leads data | Includes leads + lead_action_items |
-| Scheduled backups | Non-functional (no edge function) | Fully working with scope selection |
-| Restore on mixed ID types | Crashes on bigint tables | Works universally |
+After applying the fixes, test by invoking the `create-backup` function to confirm:
+- Full backup record count is ~5,232 (not 31,000+)
+- Deals module backup includes leads + lead_action_items
+- The scheduled-backup function responds correctly when invoked
+
+---
+
+## Summary of All Changes
+
+| # | Type | What | Risk |
+|---|------|------|------|
+| 1 | SQL (insert tool) | DELETE 25,233 noise rows from `security_audit_log` | Zero risk -- only deletes session/navigation noise, no business data |
+| 2 | Code edit | Remove `logDataAccess` and `SENSITIVE_DATA_ACCESS` from `useSecureDataAccess.tsx` | Stops future noise generation |
+| 3 | Code edit + deploy | Add `SKIP_TABLES` blocklist to `restore-backup/index.ts` catch-all | Prevents old bloated backups from re-importing noise |
+| 4 | SQL (insert tool) | Create pg_cron job for scheduled-backup | Activates scheduled backups |
+| 5 | Test | Invoke create-backup and scheduled-backup via curl | Validates everything works |
+
+## What Will NOT Be Done (per user instruction)
+
+- No data restore operations
+- No modification of production business data
+- No deletion of backup history records
 

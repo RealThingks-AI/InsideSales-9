@@ -113,6 +113,14 @@ const AuditLogsSettings = () => {
   const filteredLogs = useMemo(() => {
     let result = filterByCategory(logs, category);
 
+    // Module filter
+    if (moduleFilter !== 'all') {
+      result = result.filter(log =>
+        log.resource_type === moduleFilter ||
+        log.details?.module?.toLowerCase() === moduleFilter
+      );
+    }
+
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       result = result.filter(log =>
@@ -133,7 +141,7 @@ const AuditLogsSettings = () => {
     }
 
     return result;
-  }, [logs, category, searchTerm, dateFrom, dateTo, userNames]);
+  }, [logs, category, moduleFilter, searchTerm, dateFrom, dateTo, userNames]);
 
   // Pagination
   const totalPages = Math.ceil(filteredLogs.length / ITEMS_PER_PAGE);

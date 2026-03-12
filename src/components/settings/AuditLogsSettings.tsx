@@ -161,7 +161,7 @@ const AuditLogsSettings = () => {
 
   const canRevert = (log: AuditLog) =>
     ['CREATE', 'UPDATE', 'DELETE'].includes(log.action) &&
-    ['contacts', 'deals', 'leads'].includes(log.resource_type) &&
+    ['contacts', 'deals', 'leads', 'action_items'].includes(log.resource_type) &&
     log.resource_id && log.details;
 
   const isValidTableName = (t: string): t is ValidTableName => ['contacts', 'deals', 'leads'].includes(t);

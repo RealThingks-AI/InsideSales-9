@@ -18,7 +18,7 @@ import {
   getStatsFromLogs, formatFieldValue
 } from "./audit/auditLogUtils";
 
-type ValidTableName = 'contacts' | 'deals' | 'leads';
+type ValidTableName = 'contacts' | 'deals' | 'leads' | 'action_items';
 
 const badgeColorClasses: Record<string, string> = {
   green: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400',

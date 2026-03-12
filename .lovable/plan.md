@@ -1,126 +1,91 @@
 
 
-# Complete Backup & Restore Deep Fix
+## Fix Note Editor Bullet Point & Stakeholders Layout Issues
 
-## Current State (Verified from Live Database)
+### Issues Found
 
-| Metric | Value |
-|--------|-------|
-| `security_audit_log` total rows | **26,167** |
-| Noise rows (SESSION_START/END/ACTIVE/INACTIVE + others) | **25,233** (96.4%) |
-| Meaningful rows (CREATE, UPDATE, DELETE, etc.) | **934** |
-| Full backup record count (latest) | 5,232 (correct, post-fix) |
-| Old bloated backup still in history | 30,777 records (contains `security_audit_log`: 25,551, `user_sessions`: 1, `keep_alive`: 1) |
-| pg_cron extension | Enabled |
-| pg_net extension | Enabled |
-| Existing cron jobs | **None** (scheduled backups not wired up) |
-| Backup schedule configured | Yes - full, every 2 days, 06:00, enabled, next_run: Feb 21 |
+1. **Bullet point moves when typing**: `autoFocus` on the Textarea (line 633) places the cursor at position 0 (before `"• "`), so typing inserts text before the bullet instead of after it.
 
----
+2. **Notes panel lacks proper scrollbar**: The notes summary panel (line 580-679) has a `max-h-[280px]` on the inner div but the outer wrapper has no scroll constraint, so it still pushes content.
 
-## Issue 1 -- Clean up 25,233 noise rows (SQL via insert tool)
+3. **Stakeholders section grows unbounded**: The `StakeholdersSection` component has no max-height. When the Notes panel is open with many notes, it consumes all vertical space, squishing the Updates and Action Items sections to near-zero height.
 
-Run a DELETE to remove all session noise, page navigation, window focus/blur, heartbeat, SELECT, and SENSITIVE_DATA_ACCESS rows. These actions have zero operational value and are already hidden from the Audit Log UI.
+### Changes (single file: `src/components/DealExpandedPanel.tsx`)
 
-```sql
-DELETE FROM security_audit_log 
-WHERE action IN (
-  'SESSION_START', 'SESSION_END', 
-  'SESSION_ACTIVE', 'SESSION_INACTIVE', 
-  'SESSION_HEARTBEAT', 
-  'WINDOW_BLUR', 'WINDOW_FOCUS', 
-  'USER_ACTIVITY', 
-  'SELECT', 'SENSITIVE_DATA_ACCESS', 
-  'PAGE_NAVIGATION'
-);
+#### Fix 1: Bullet cursor positioning (line 628-634)
+
+Replace `autoFocus` on the Textarea with a `ref` callback that focuses the element AND places the cursor at the end of the text (after `"• "`):
+
+```tsx
+<Textarea
+  value={noteText}
+  onChange={(e) => setNoteText(e.target.value)}
+  onKeyDown={handleNoteKeyDown}
+  className="min-h-[100px] text-xs resize-none"
+  ref={(el) => {
+    if (el) {
+      el.focus();
+      const len = el.value.length;
+      el.selectionStart = len;
+      el.selectionEnd = len;
+    }
+  }}
+/>
 ```
 
-Expected result: ~934 meaningful rows remain (CREATE, UPDATE, DELETE, BULK_DELETE, DATA_IMPORT, DATA_EXPORT, NOTE, EMAIL, CALL, MEETING, PASSWORD_CHANGE, SESSION_TERMINATED).
+#### Fix 2: Constrain Stakeholders section height
 
-**IMPORTANT**: This is a DELETE of noise data only. No production business data is touched.
+Wrap the StakeholdersSection output in a container with `max-h` and `overflow-y-auto` so it scrolls when content is large. Change the outer div (line 462) from:
 
----
-
-## Issue 2 -- Remove SENSITIVE_DATA_ACCESS logging from useSecureDataAccess
-
-**File:** `src/hooks/useSecureDataAccess.tsx`
-
-The `logDataAccess` call on line 18 with `'SELECT'` is now safely skipped (the hook has a guard). BUT lines 32-37 still log `SENSITIVE_DATA_ACCESS` on every successful fetch of deals/contacts/leads. This fires ~2 rows per page navigation to those modules. Since these are excluded from the Audit Log UI already, they serve no purpose.
-
-**Fix:** Remove lines 17-18 (`await logDataAccess(tableName, operation)`) and lines 32-37 (the `SENSITIVE_DATA_ACCESS` logging block). Keep the `DATA_ACCESS_FAILED` log (lines 23-28) since failed access IS meaningful.
-
----
-
-## Issue 3 -- Restore function still imports noise tables from old backups (CRITICAL)
-
-**File:** `supabase/functions/restore-backup/index.ts`
-
-The restore function correctly removed `security_audit_log`, `user_sessions`, `keep_alive` from `DELETE_ORDER` and `INSERT_ORDER`. However, lines 203-215 contain a **catch-all loop** that restores ANY table present in the backup file that is NOT in `INSERT_ORDER`:
-
-```typescript
-// Also restore any tables in the backup that aren't in INSERT_ORDER
-for (const table of tablesToRestore) {
-  if (INSERT_ORDER.includes(table) || !backupData[table]?.length) continue
-  // ... upserts the data
-}
+```tsx
+<div className="px-3 pt-1.5 pb-1">
 ```
 
-This means if someone restores the old 30,777-record backup (which contains `security_audit_log` with 25,551 rows, `user_sessions`, and `keep_alive`), those tables WILL be restored through this catch-all, defeating the entire fix.
+to:
 
-**Fix:** Add a `SKIP_TABLES` blocklist and filter them out in both the catch-all loop AND the pre-restore safety backup:
-
-```typescript
-const SKIP_TABLES = ['security_audit_log', 'user_sessions', 'keep_alive']
+```tsx
+<div className="px-3 pt-1.5 pb-1 max-h-[45%] overflow-y-auto shrink-0">
 ```
 
-Then filter `tablesToRestore` at line 123 to exclude these tables, so they are never deleted, backed up, or restored.
+However, since this is not inside a flex parent that uses percentage heights well, a better approach is to change the parent layout. The parent (line 1182) is:
 
----
-
-## Issue 4 -- Set up pg_cron job for scheduled backups (SQL via insert tool)
-
-Both `pg_cron` and `pg_net` extensions are confirmed enabled. The scheduled-backup edge function is deployed. A schedule exists (full backup, every 2 days at 06:00, enabled). But NO cron job exists to trigger it.
-
-```sql
-SELECT cron.schedule(
-  'scheduled-backup-check',
-  '0 * * * *',
-  $$
-  SELECT net.http_post(
-    url:='https://nreslricievaamrwfrlx.supabase.co/functions/v1/scheduled-backup',
-    headers:='{"Content-Type": "application/json", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5yZXNscmljaWV2YWFtcndmcmx4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU0Mjc3NTUsImV4cCI6MjA3MTAwMzc1NX0.xHf2lE2OGZ5jNGOBWGAsOdoyHqdwi_TxWkbKiAr1RJY"}'::jsonb,
-    body:='{}'::jsonb
-  ) as request_id;
-  $$
-);
+```tsx
+<div className="flex-1 min-h-0 flex flex-col overflow-hidden gap-1">
 ```
 
-This checks every hour if any scheduled backup is due (`next_run_at <= now()`). Since the function uses `verify_jwt = false` and validates schedules server-side, the anon key is sufficient.
+The fix: Make the StakeholdersSection a flex item that can shrink, and give it a max-height so it doesn't dominate. Change line 1184 from:
 
----
+```tsx
+<StakeholdersSection deal={deal} queryClient={queryClient} />
+```
 
-## Issue 5 -- Test the backup flow (via edge function curl)
+to wrap it in a constrained container:
 
-After applying the fixes, test by invoking the `create-backup` function to confirm:
-- Full backup record count is ~5,232 (not 31,000+)
-- Deals module backup includes leads + lead_action_items
-- The scheduled-backup function responds correctly when invoked
+```tsx
+<div className="shrink-0 max-h-[40%] overflow-y-auto">
+  <StakeholdersSection deal={deal} queryClient={queryClient} />
+</div>
+```
 
----
+This ensures:
+- Stakeholders section gets at most 40% of the panel height
+- When content exceeds that, a scrollbar appears
+- Updates and Action Items always get their fair share of space
 
-## Summary of All Changes
+#### Fix 3: Ensure notes panel scrolls properly
 
-| # | Type | What | Risk |
-|---|------|------|------|
-| 1 | SQL (insert tool) | DELETE 25,233 noise rows from `security_audit_log` | Zero risk -- only deletes session/navigation noise, no business data |
-| 2 | Code edit | Remove `logDataAccess` and `SENSITIVE_DATA_ACCESS` from `useSecureDataAccess.tsx` | Stops future noise generation |
-| 3 | Code edit + deploy | Add `SKIP_TABLES` blocklist to `restore-backup/index.ts` catch-all | Prevents old bloated backups from re-importing noise |
-| 4 | SQL (insert tool) | Create pg_cron job for scheduled-backup | Activates scheduled backups |
-| 5 | Test | Invoke create-backup and scheduled-backup via curl | Validates everything works |
+The notes summary panel (line 596) already has `max-h-[280px] overflow-y-auto`, but when inside the constrained container from Fix 2, this works correctly. No additional change needed here -- the outer scroll from Fix 2 handles it.
 
-## What Will NOT Be Done (per user instruction)
+### Summary
 
-- No data restore operations
-- No modification of production business data
-- No deletion of backup history records
+| Change | Line(s) | Description |
+|--------|---------|-------------|
+| Replace `autoFocus` with ref callback | 628-634 | Cursor placed after bullet on open |
+| Wrap StakeholdersSection in scrollable container | 1184 | Max 40% height with scrollbar |
+
+### Technical Notes
+
+- The ref callback fires on every render, but since `el.focus()` is idempotent when already focused, this is harmless
+- The `max-h-[40%]` works because the parent has `flex-1 min-h-0` which resolves to an actual pixel height
+- Updates and Action Items sections keep their `flex-1 min-h-0` with `h-[220px]`, ensuring they share remaining space equally
 

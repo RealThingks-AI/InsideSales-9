@@ -277,6 +277,8 @@ const AuditLogsSettings = () => {
             onSearchChange={setSearchTerm}
             category={category}
             onCategoryChange={setCategory}
+            moduleFilter={moduleFilter}
+            onModuleFilterChange={setModuleFilter}
             dateFrom={dateFrom}
             dateTo={dateTo}
             onDateFromChange={setDateFrom}

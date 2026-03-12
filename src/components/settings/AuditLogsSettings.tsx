@@ -148,7 +148,7 @@ const AuditLogsSettings = () => {
   const paginatedLogs = filteredLogs.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
   // Reset page on filter change
-  useEffect(() => { setCurrentPage(1); }, [category, searchTerm, dateFrom, dateTo]);
+  useEffect(() => { setCurrentPage(1); }, [category, moduleFilter, searchTerm, dateFrom, dateTo]);
 
   // Stats
   const stats = useMemo(() => getStatsFromLogs(filteredLogs), [filteredLogs]);

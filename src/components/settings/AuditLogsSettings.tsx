@@ -164,7 +164,7 @@ const AuditLogsSettings = () => {
     ['contacts', 'deals', 'leads', 'action_items'].includes(log.resource_type) &&
     log.resource_id && log.details;
 
-  const isValidTableName = (t: string): t is ValidTableName => ['contacts', 'deals', 'leads'].includes(t);
+  const isValidTableName = (t: string): t is ValidTableName => ['contacts', 'deals', 'leads', 'action_items'].includes(t);
 
   const handleRevertClick = (log: AuditLog) => { setSelectedLog(log); setRevertDialogOpen(true); };
 

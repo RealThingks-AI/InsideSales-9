@@ -7,11 +7,15 @@ import { Search, CalendarIcon, X } from "lucide-react";
 import { format } from "date-fns";
 import { FilterCategory, getDatePresets } from "./auditLogUtils";
 
+export type ModuleFilter = 'all' | 'deals' | 'contacts' | 'leads' | 'action_items' | 'accounts';
+
 interface AuditLogFiltersProps {
   searchTerm: string;
   onSearchChange: (value: string) => void;
   category: FilterCategory;
   onCategoryChange: (value: FilterCategory) => void;
+  moduleFilter: ModuleFilter;
+  onModuleFilterChange: (value: ModuleFilter) => void;
   dateFrom: Date | undefined;
   dateTo: Date | undefined;
   onDateFromChange: (date: Date | undefined) => void;
